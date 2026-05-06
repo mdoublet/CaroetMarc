@@ -1250,9 +1250,9 @@ function renderAnecdotesGame(){
         ${choiceBtn('Lui')}${choiceBtn('Elle')}${choiceBtn('Les 2')}
       </div>
 
-      <!-- Comment (shown after wrong answer) -->
-      ${alreadyAnswered&&!prevAns.correct&&a.commentaire?`
-      <div style="margin:0 14px 14px;background:var(--info-bg);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;color:var(--info);line-height:1.5">
+      <!-- Comment (shown after any answer if comment exists) -->
+      ${alreadyAnswered&&a.commentaire?`
+      <div style="margin:0 14px 14px;background:${prevAns.correct?'var(--success-bg)':'var(--info-bg)'};border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;color:${prevAns.correct?'var(--success)':'var(--info)'};line-height:1.5">
         💡 ${a.commentaire}
       </div>`:''}
 
@@ -1378,18 +1378,89 @@ async function saveAnecdotesAndEpreuve(){
   showToast({icon:'✅',title:`${rows.length} anecdote${rows.length>1?'s':''} sauvegardée${rows.length>1?'s':''}`,duration:3000});
 }
 async function renderAdminArchive(){
-  const {data:archives}=await db.from('photos_archive').select('*').order('archived_at',{ascending:false});
   const el=document.getElementById('adminArchiveContent');
-  if(!archives||!archives.length){el.innerHTML='<div class="notice">Aucune archive. Les photos seront archivées lors du prochain reset.</div>';return;}
-  const sessions={};
-  archives.forEach(p=>{const k=p.archive_label||'Session sans nom';if(!sessions[k])sessions[k]=[];sessions[k].push(p);});
-  let html=`<div style="font-size:13px;color:var(--ink-muted);margin-bottom:14px">${archives.length} photo${archives.length>1?'s':''} archivée${archives.length>1?'s':''}</div>`;
-  Object.entries(sessions).forEach(([label,photos])=>{
-    html+=`<div class="archive-session"><div class="archive-session-title">📁 ${label} · ${photos.length} photo${photos.length>1?'s':''}</div>
-      <div class="archive-grid">${photos.map(p=>`<div class="archive-thumb" onclick="openPhotoViewer('${p.data}')"><img src="${p.data}" alt=""><div class="archive-thumb-label">${p.equipe_nom} · Ch.${p.challenge_num||1} · E${p.attempt_num||'?'} · ${p.statut==='validee'?'+'+p.points+'pts':p.statut}</div></div>`).join('')}</div>
-    </div>`;
+  el.innerHTML='<div class="loader-text" style="padding:1rem">Chargement...</div>';
+
+  const [{data:photoArchive},{data:pbArchive},{data:anecArchive}]=await Promise.all([
+    db.from('photos_archive').select('*').order('archived_at',{ascending:false}),
+    db.from('petit_bac_archive').select('*').order('archived_at',{ascending:false}),
+    db.from('anecdotes_archive').select('*').order('archived_at',{ascending:false})
+  ]);
+
+  // Collect all session labels across all tables
+  const allLabels=new Set([
+    ...(photoArchive||[]).map(r=>r.archive_label),
+    ...(pbArchive||[]).map(r=>r.archive_label),
+    ...(anecArchive||[]).map(r=>r.archive_label)
+  ]);
+
+  if(!allLabels.size){ el.innerHTML='<div class="notice">Aucune archive disponible. Les données seront archivées lors du prochain reset.</div>'; return; }
+
+  let html='';
+  // Sort labels: most recent first (they contain date strings)
+  [...allLabels].sort().reverse().forEach(label=>{
+    const photos=(photoArchive||[]).filter(r=>r.archive_label===label);
+    const pbReps=(pbArchive||[]).filter(r=>r.archive_label===label);
+    const anecReps=(anecArchive||[]).filter(r=>r.archive_label===label);
+
+    html+=`<div style="margin-bottom:24px">
+      <div style="font-size:14px;font-weight:500;color:var(--ink);padding:8px 12px;background:var(--gold-light);border-radius:var(--radius);margin-bottom:12px">📁 ${label}</div>`;
+
+    // ---- Subcategory: Photos ----
+    if(photos.length){
+      const byTeam={};
+      photos.forEach(p=>{const k=p.equipe_nom;if(!byTeam[k])byTeam[k]=[];byTeam[k].push(p);});
+      html+=`<div style="margin-bottom:12px">
+        <div style="font-size:12px;font-weight:500;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📸 Défi Photo</div>
+        ${Object.entries(byTeam).map(([team,list])=>`
+          <div style="margin-bottom:10px">
+            <div style="font-size:13px;font-weight:500;margin-bottom:6px">${team}</div>
+            <div class="archive-grid">
+              ${list.map(p=>`<div class="archive-thumb" onclick="openPhotoViewer('${p.data}')">
+                <img src="${p.data}" alt="">
+                <div class="archive-thumb-label">Ch.${p.challenge_num||1} · E${p.attempt_num||'?'} · ${p.statut==='validee'?'+'+p.points+'pts':p.statut}</div>
+              </div>`).join('')}
+            </div>
+          </div>`).join('')}
+      </div>`;
+    }
+
+    // ---- Subcategory: Petit Bac ----
+    if(pbReps.length){
+      const byTeam={};
+      pbReps.forEach(r=>{if(!byTeam[r.equipe_nom])byTeam[r.equipe_nom]={};byTeam[r.equipe_nom][r.lettre]=r.ville_donnee;});
+      html+=`<div style="margin-bottom:12px">
+        <div style="font-size:12px;font-weight:500;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">🏙 Petit Bac des Villes</div>
+        ${Object.entries(byTeam).map(([team,lettres])=>`
+          <div class="card" style="margin-bottom:8px">
+            <div style="font-size:13px;font-weight:500;margin-bottom:8px">${team} · ${Object.keys(lettres).length} pt${Object.keys(lettres).length!==1?'s':''}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 12px">
+              ${Object.entries(lettres).sort().map(([l,v])=>`<div style="font-size:12px"><span style="font-weight:600;color:var(--gold-dark)">${l} —</span> <span style="color:var(--success)">${v}</span></div>`).join('')}
+            </div>
+          </div>`).join('')}
+      </div>`;
+    }
+
+    // ---- Subcategory: Anecdotes ----
+    if(anecReps.length){
+      const byTeam={};
+      anecReps.forEach(r=>{if(!byTeam[r.equipe_nom])byTeam[r.equipe_nom]=r;});
+      html+=`<div style="margin-bottom:12px">
+        <div style="font-size:12px;font-weight:500;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">🎭 Celui qui…</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          ${Object.entries(byTeam).map(([team,r])=>`
+            <div class="card" style="text-align:center;padding:10px">
+              <div style="font-size:13px;font-weight:500">${team}</div>
+              <div style="font-size:22px;font-weight:500;font-family:'Playfair Display',serif;color:var(--gold-dark)">${r.reponse_correcte}</div>
+            </div>`).join('')}
+        </div>
+      </div>`;
+    }
+
+    html+=`</div>`;
   });
-  el.innerHTML=html;
+
+  el.innerHTML=html||'<div class="notice">Aucune archive disponible.</div>';
 }
 
 // ===================== LEADERBOARD =====================
@@ -1405,17 +1476,64 @@ function openResetModal(){document.getElementById('resetModal').classList.add('o
 function closeResetModal(){document.getElementById('resetModal').classList.remove('open');}
 async function confirmReset(){
   const label=document.getElementById('archiveLabel').value||`Reset du ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`;
+  const now=new Date().toISOString();
+
+  // 1. Archive photos
   const {data:photos}=await db.from('photos').select('*');
   if(photos?.length){
-    await db.from('photos_archive').insert(photos.map(p=>({original_id:p.id,equipe_nom:p.equipe_nom,epreuve_id:p.epreuve_id,challenge_num:p.challenge_num||1,attempt_num:p.attempt_num||1,data:p.data,statut:p.statut,points:p.points||0,created_at:p.created_at,archived_at:new Date().toISOString(),archive_label:label})));
+    await db.from('photos_archive').insert(photos.map(p=>({
+      original_id:p.id,equipe_nom:p.equipe_nom,epreuve_id:p.epreuve_id,
+      challenge_num:p.challenge_num||1,attempt_num:p.attempt_num||1,
+      data:p.data,statut:p.statut,points:p.points||0,
+      created_at:p.created_at,archived_at:now,archive_label:label
+    })));
   }
+
+  // 2. Archive petit bac responses
+  const {data:pbRep}=await db.from('petit_bac_reponses').select('*');
+  if(pbRep?.length){
+    await db.from('petit_bac_archive').insert(pbRep.map(r=>({
+      equipe_nom:r.equipe_nom,lettre:r.lettre,ville_donnee:r.ville_donnee,
+      archive_label:label,archived_at:now
+    })));
+  }
+
+  // 3. Archive anecdotes responses (from scores + locked state we reconstruct per team)
+  // We archive the scores table snapshot for anecdotes
+  const {data:scores}=await db.from('scores').select('*');
+  if(scores?.length){
+    const anecEp=appData.epreuves.find(e=>e.type==='qcm');
+    if(anecEp){
+      const anecScores=scores.filter(s=>s.epreuve_id===anecEp.id);
+      if(anecScores.length){
+        await db.from('anecdotes_archive').insert(anecScores.map(s=>({
+          equipe_nom:s.equipe_nom,
+          celui_qui:'(score global)',
+          reponse_correcte:`${s.score} pts`,
+          reponse_donnee:`${s.score} pts`,
+          correct:true,
+          archive_label:label,
+          archived_at:now
+        })));
+      }
+    }
+  }
+
+  // 4. Delete live data
   await db.from('scores').delete().neq('id',0);
   await db.from('photos').delete().neq('id',0);
-  appData.teams.forEach(t=>{appData.epreuves.forEach(e=>{appData.scores[t][e.id]=null;});challengeState[t]={1:{attempts:[],done:false,points:0},2:{attempts:[],done:false,points:0}};});
+  await db.from('petit_bac_reponses').delete().neq('id',0);
+
+  // 5. Reset local state
+  appData.teams.forEach(t=>{
+    appData.epreuves.forEach(e=>{appData.scores[t][e.id]=null;});
+    if(appData.locked[t]) appData.locked[t]={};
+    challengeState[t]={1:{attempts:[],done:false,points:0},2:{attempts:[],done:false,points:0}};
+  });
   pendingPhotoCount=0;updateAdminPhotoBadge();
   closeResetModal();document.getElementById('archiveLabel').value='';
   renderAdminScores();renderAdminPhotos();renderLeaderboard('adminLeaderboard');
-  showToast({icon:'📁',title:`Archivé : "${label}"`,msg:'Scores remis à zéro.',type:'gold',duration:5000});
+  showToast({icon:'📁',title:`Archivé : "${label}"`,msg:'Scores et réponses archivés, remis à zéro.',type:'gold',duration:5000});
 }
 
 // ===================== GM: INSTRUCTIONS =====================
