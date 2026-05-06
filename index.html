@@ -1,0 +1,1754 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Marc & Caroline — Chasse au trésor</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --cream:#FAF8F3;--warm-white:#FFFEF9;
+  --gold:#B8975A;--gold-light:#E8D9B8;--gold-dark:#8A6E3A;
+  --ink:#1C1A17;--ink-soft:#4A4640;--ink-muted:#8A857D;
+  --border:#E0D9CC;--border-strong:#C8BFA8;
+  --success-bg:#EDF5E8;--success:#3A7C2A;
+  --danger-bg:#FCEAEA;--danger:#A32020;
+  --info-bg:#EAF0F8;--info:#1A4A8A;
+  --amber-bg:#FBF3E0;--amber:#8A5E0A;
+  --radius:12px;--radius-sm:8px;--radius-pill:24px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{background:var(--cream)}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--ink);min-height:100vh;max-width:480px;margin:0 auto;padding-bottom:3rem}
+#globalLoader{position:fixed;inset:0;background:var(--cream);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:16px}
+.loader-ring{width:40px;height:40px;border:3px solid var(--gold-light);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loader-text{font-size:13px;color:var(--ink-muted)}
+#toastContainer{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:500;display:flex;flex-direction:column;gap:8px;width:calc(100% - 32px);max-width:420px;pointer-events:none}
+.toast{background:var(--ink);color:white;border-radius:var(--radius);padding:12px 16px;font-size:13px;display:flex;align-items:flex-start;gap:10px;pointer-events:all;animation:slideDown .3s ease;box-shadow:0 4px 20px rgba(0,0,0,.25)}
+.toast.success{background:#2A5C1E}.toast.danger{background:#8A1A1A}.toast.gold{background:var(--gold-dark)}
+@keyframes slideDown{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
+.toast-icon{font-size:18px;flex-shrink:0;margin-top:1px}
+.toast-body{flex:1}
+.toast-title{font-weight:500;margin-bottom:2px}
+.toast-msg{font-size:12px;opacity:.85}
+.toast-actions{display:flex;gap:6px;margin-top:8px}
+.toast-btn{padding:5px 12px;border-radius:var(--radius-pill);font-size:12px;font-weight:500;cursor:pointer;border:none;font-family:'DM Sans',sans-serif}
+.toast-btn-ok{background:white;color:var(--ink)}.toast-btn-no{background:rgba(255,255,255,.2);color:white}
+.notif-badge{display:none;background:var(--danger);color:white;border-radius:50%;width:16px;height:16px;font-size:10px;font-weight:500;align-items:center;justify-content:center;margin-left:4px}
+.notif-badge.visible{display:inline-flex}
+@keyframes pointsPop{0%{transform:scale(0) translateY(0);opacity:1}80%{transform:scale(1.3) translateY(-40px);opacity:1}100%{transform:scale(1) translateY(-60px);opacity:0}}
+.points-pop{position:fixed;font-size:24px;font-weight:500;color:var(--gold-dark);font-family:'Playfair Display',serif;pointer-events:none;animation:pointsPop 1.6s ease forwards;z-index:300}
+
+/* LOGIN */
+.login-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1.5rem;text-align:center}
+.monogram{width:72px;height:72px;border-radius:50%;background:var(--gold-light);border:1.5px solid var(--gold);display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-size:22px;color:var(--gold-dark);margin:0 auto 1.5rem;letter-spacing:2px}
+.login-title{font-size:26px;font-weight:400;margin-bottom:4px}
+.login-sub{font-size:13px;color:var(--ink-muted);margin-bottom:2.5rem;letter-spacing:.5px}
+.role-cards{display:flex;flex-direction:column;gap:10px;width:100%;margin-bottom:2rem}
+.role-card{background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.25rem;text-align:left;cursor:pointer;display:flex;align-items:center;gap:14px;transition:border-color .15s}
+.role-card.selected{border-color:var(--gold);background:var(--amber-bg)}
+.role-card:active{transform:scale(.98)}
+.role-icon{width:40px;height:40px;border-radius:50%;background:var(--gold-light);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.role-card.selected .role-icon{background:var(--gold)}
+.role-card-title{font-size:14px;font-weight:500}
+.role-card.selected .role-card-title{color:var(--gold-dark)}
+.role-card-desc{font-size:12px;color:var(--ink-muted);margin-top:2px}
+.field-label{font-size:12px;color:var(--ink-muted);margin-bottom:5px;font-weight:500;letter-spacing:.3px}
+select,input[type=text],input[type=password],input[type=number],textarea{width:100%;padding:11px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:15px;-webkit-appearance:none;appearance:none}
+select:focus,input:focus,textarea:focus{outline:none;border-color:var(--gold)}
+.pin-input{letter-spacing:6px;font-size:20px;text-align:center}
+.field{margin-bottom:14px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 20px;border-radius:var(--radius-pill);border:1px solid var(--border-strong);background:transparent;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;color:var(--ink);transition:background .12s,transform .1s}
+.btn:active{transform:scale(.97)}
+.btn-gold{background:var(--gold);color:white;border-color:var(--gold-dark)}
+.btn-gold:hover{background:var(--gold-dark)}
+.btn-danger{color:var(--danger);border-color:var(--danger)}
+.btn-danger:hover{background:var(--danger-bg)}
+.btn-full{width:100%}.btn-sm{padding:7px 14px;font-size:13px}
+.err-msg{font-size:12px;color:var(--danger);margin-top:6px}
+
+/* SHELL */
+.app-header{background:var(--warm-white);border-bottom:1px solid var(--border);padding:14px 16px 10px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10}
+.app-header-title{font-size:15px;font-weight:500;display:flex;align-items:center;gap:6px}
+.app-header-sub{font-size:11px;color:var(--ink-muted)}
+.logout-btn{font-size:12px;color:var(--ink-muted);background:none;border:none;cursor:pointer;padding:4px 8px;margin-left:auto}
+.nav-tabs{display:flex;overflow-x:auto;background:var(--warm-white);border-bottom:1px solid var(--border);padding:0 8px;scrollbar-width:none}
+.nav-tabs::-webkit-scrollbar{display:none}
+.nav-tab{flex-shrink:0;padding:11px 12px;font-size:13px;color:var(--ink-muted);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s,border-color .15s;display:inline-flex;align-items:center;gap:3px}
+.nav-tab.active{color:var(--gold-dark);border-bottom-color:var(--gold);font-weight:500}
+.page{display:none;padding:16px}.page.active{display:block}
+.card{background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.1rem;margin-bottom:12px}
+.card-title{font-size:15px;font-weight:500;margin-bottom:8px}
+.divider{border:none;border-top:1px solid var(--border);margin:10px 0}
+.badge{display:inline-block;font-size:11px;font-weight:500;padding:3px 10px;border-radius:var(--radius-pill)}
+.badge-gold{background:var(--gold-light);color:var(--gold-dark)}
+.notice{background:var(--info-bg);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;color:var(--info);margin-bottom:12px;line-height:1.5}
+.warn{background:var(--amber-bg);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;color:var(--amber);margin-bottom:12px;line-height:1.5}
+.sync-indicator{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--success)}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:var(--success);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.team-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.team-btn{padding:10px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;color:var(--ink);cursor:pointer;text-align:center;transition:all .12s}
+.team-btn.selected{border-color:var(--gold);background:var(--amber-bg);color:var(--gold-dark)}
+.score-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.score-lbl{font-size:13px;color:var(--ink-muted);flex:1}
+.score-input-sm{width:70px;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:15px;font-weight:500;text-align:center}
+.score-table-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border)}
+.score-table{width:100%;border-collapse:collapse;min-width:300px}
+.score-table th{background:var(--cream);padding:8px;font-size:11px;font-weight:500;color:var(--ink-muted);text-align:center;border-bottom:1px solid var(--border)}
+.score-table th:first-child{text-align:left;padding-left:12px}
+.score-table td{padding:8px 6px;text-align:center;border-bottom:1px solid var(--border);font-size:13px}
+.score-table td:first-child{text-align:left;font-weight:500;padding-left:12px}
+.score-table tr:last-child td{border-bottom:none}
+.score-input-table{width:52px;padding:5px 4px;border-radius:6px;border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center}
+.lb-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.lb-rank{font-size:18px;font-weight:500;min-width:28px;color:var(--ink-muted);font-family:'Playfair Display',serif}
+.lb-rank.gold{color:#B8820A}.lb-rank.silver{color:#808080}.lb-rank.bronze{color:#A0501A}
+.lb-name{flex:1;font-size:14px;font-weight:500}
+.lb-bar-wrap{width:60px;background:var(--border);border-radius:4px;height:6px;overflow:hidden}
+.lb-bar{height:100%;border-radius:4px;background:var(--gold)}
+.lb-pts{font-size:13px;font-weight:500;min-width:44px;text-align:right;color:var(--gold-dark)}
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px}
+.stat-card{background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;text-align:center}
+.stat-val{font-size:22px;font-weight:500;font-family:'Playfair Display',serif}
+.stat-lbl{font-size:11px;color:var(--ink-muted);margin-top:2px}
+.q-item{padding:12px 0;border-bottom:1px solid var(--border)}
+.q-text{font-size:14px;margin-bottom:8px;line-height:1.5;font-style:italic}
+.q-opts{display:flex;gap:6px;flex-wrap:wrap}
+.q-opt{padding:6px 14px;border-radius:var(--radius-pill);border:1px solid var(--border);background:transparent;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;color:var(--ink);transition:all .12s}
+.q-opt.correct{background:var(--success-bg);border-color:var(--success);color:var(--success);font-weight:500}
+.q-opt.wrong{background:var(--danger-bg);border-color:var(--danger);color:var(--danger)}
+.q-opt:disabled{cursor:default}
+.ep-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.ep-tab{padding:7px 14px;border-radius:var(--radius-pill);border:1px solid var(--border);background:var(--warm-white);font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer;color:var(--ink-muted)}
+.ep-tab.active{background:var(--gold-light);border-color:var(--gold);color:var(--gold-dark);font-weight:500}
+
+/* PHOTO CHALLENGE */
+.challenge-block{background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:14px;overflow:hidden}
+.challenge-header{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.challenge-title{font-size:14px;font-weight:500}
+.challenge-subtitle{font-size:12px;color:var(--ink-muted);margin-top:2px}
+.challenge-pts-badge{font-size:13px;font-weight:500;color:var(--gold-dark);background:var(--gold-light);padding:4px 12px;border-radius:var(--radius-pill);white-space:nowrap}
+.challenge-pts-badge.done{background:var(--success-bg);color:var(--success)}
+.challenge-pts-badge.failed{background:#F0EDE6;color:var(--ink-muted)}
+.attempts-row{display:flex;gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap}
+.attempt-dot{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;color:var(--ink-muted);flex-shrink:0;transition:all .3s}
+.attempt-dot.used{border-color:var(--danger);background:var(--danger-bg);color:var(--danger)}
+.attempt-dot.current{border-color:var(--gold);background:var(--gold-light);color:var(--gold-dark);animation:dotPulse 1.5s infinite}
+.attempt-dot.success{border-color:var(--success);background:var(--success-bg);color:var(--success)}
+.attempt-dot.inactive{opacity:.3;border-color:var(--border)}
+@keyframes dotPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+.attempt-label{font-size:12px;color:var(--ink-muted);margin-left:6px}
+.photo-submit-area{padding:12px 14px}
+.photo-zone{border:1.5px dashed var(--border-strong);border-radius:var(--radius-sm);padding:1.25rem;text-align:center;cursor:pointer;transition:background .12s}
+.photo-zone:active{background:var(--gold-light)}
+.photo-zone-text{font-size:13px;color:var(--ink-muted);margin-top:6px}
+input[type=file]{display:none}
+
+/* ADMIN PHOTO */
+.admin-photo-card{background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px;overflow:hidden}
+.admin-photo-card img{width:100%;aspect-ratio:3/2;object-fit:cover;display:block;cursor:pointer}
+.admin-photo-footer{padding:10px 14px}
+.admin-photo-meta{font-size:13px;font-weight:500;margin-bottom:2px}
+.admin-photo-sub{font-size:12px;color:var(--ink-muted);margin-bottom:4px}
+.admin-photo-actions{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+.attempt-info-badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;padding:4px 10px;border-radius:var(--radius-pill);background:var(--amber-bg);color:var(--amber)}
+
+/* ARCHIVE */
+.archive-session{margin-bottom:20px}
+.archive-session-title{font-size:13px;font-weight:500;color:var(--ink-muted);margin-bottom:10px;padding:6px 12px;background:var(--cream);border-radius:var(--radius-sm)}
+.archive-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.archive-thumb{aspect-ratio:1;border-radius:var(--radius-sm);overflow:hidden;position:relative;border:1px solid var(--border);cursor:pointer}
+.archive-thumb img{width:100%;height:100%;object-fit:cover}
+.archive-thumb-label{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.5);color:white;font-size:9px;padding:3px 5px;text-align:center}
+
+/* PIN CONFIG */
+.pin-config-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.pin-config-label{font-size:13px;color:var(--ink-soft);min-width:140px;flex-shrink:0}
+.pin-config-input{width:100px;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:15px;text-align:center;letter-spacing:3px}
+
+/* GM BANNER */
+.gm-epreuve-banner{background:var(--gold-light);border-bottom:1px solid var(--gold);padding:10px 16px;text-align:center}
+.gm-epreuve-name{font-size:15px;font-weight:500;color:var(--gold-dark);font-family:'Playfair Display',serif}
+.gm-epreuve-sub{font-size:11px;color:var(--gold-dark);opacity:.8;margin-top:2px}
+
+/* JOUEURS */
+.joueur-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)}
+.joueur-nom{flex:1;font-size:14px;color:var(--ink)}
+.joueur-equipe-select{padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;width:120px}
+.joueur-delete{background:none;border:none;cursor:pointer;color:var(--ink-muted);font-size:16px;padding:4px;flex-shrink:0}
+.joueur-delete:hover{color:var(--danger)}
+
+/* MODE JOUEUR */
+.player-app-header{background:var(--warm-white);border-bottom:1px solid var(--border);padding:14px 16px 10px;text-align:center}
+.player-title{font-size:20px;font-weight:400;font-family:'Playfair Display',serif;color:var(--gold-dark)}
+.player-sub{font-size:12px;color:var(--ink-muted);margin-top:3px}
+.equipe-section{margin-bottom:20px}
+.equipe-section-title{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--gold-light);border-radius:var(--radius);margin-bottom:8px}
+.equipe-section-name{font-size:15px;font-weight:500;color:var(--gold-dark);font-family:'Playfair Display',serif;flex:1}
+.equipe-section-count{font-size:12px;color:var(--gold-dark);opacity:.8}
+.player-item{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px}
+.player-avatar{width:32px;height:32px;border-radius:50%;background:var(--gold-light);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;color:var(--gold-dark);flex-shrink:0}
+.player-name{font-size:14px;font-weight:500;color:var(--ink)}
+
+.admin-input{width:100%;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:14px}
+.admin-textarea{width:100%;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:14px;resize:vertical;min-height:80px}
+.q-editor{background:var(--cream);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:8px}
+.ville-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.ville-lettre{font-size:14px;font-weight:500;color:var(--gold-dark);min-width:20px}
+.frise-item{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;align-items:center}
+.frise-num{font-family:'Playfair Display',serif;font-size:16px;color:var(--gold);min-width:24px}
+.ville-answer-btn{padding:10px 16px;border-radius:var(--radius);border:1.5px solid var(--border);background:var(--warm-white);font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;color:var(--ink);cursor:pointer;transition:all .15s;-webkit-tap-highlight-color:transparent}
+.ville-answer-btn:active{transform:scale(.95);background:var(--gold-light);border-color:var(--gold)}
+.rte-btn{padding:4px 8px;border-radius:4px;border:1px solid var(--border);background:var(--warm-white);cursor:pointer;font-size:13px;font-family:'DM Sans',sans-serif;color:var(--ink);line-height:1.2}
+.rte-btn:hover{background:var(--gold-light);border-color:var(--gold)}
+.modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center;padding:1.5rem}
+.modal-backdrop.open{display:flex}
+.modal{background:var(--warm-white);border-radius:var(--radius);padding:1.5rem;width:100%;max-width:340px;text-align:center}
+.modal-title{font-size:17px;font-weight:500;margin-bottom:8px;font-family:'Playfair Display',serif}
+.modal-desc{font-size:13px;color:var(--ink-muted);margin-bottom:1.25rem;line-height:1.5}
+.modal-btns{display:flex;gap:8px;justify-content:center}
+.photo-viewer-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:200;align-items:center;justify-content:center;padding:1rem}
+.photo-viewer-backdrop.open{display:flex}
+.photo-viewer-img{max-width:100%;max-height:80vh;border-radius:var(--radius);object-fit:contain}
+.photo-viewer-close{position:fixed;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;border-radius:50%;width:36px;height:36px;color:white;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.save-msg{font-size:12px;color:var(--success);display:none;margin-left:8px}
+.save-msg.show{display:inline}
+</style>
+</head>
+<body>
+<div id="toastContainer"></div>
+<div id="globalLoader"><div class="loader-ring"></div><div class="loader-text" id="loaderText">Connexion en cours...</div><div id="loaderError" style="display:none;font-size:12px;color:#A32020;margin-top:8px;max-width:300px;text-align:center"></div></div>
+
+<!-- LOGIN -->
+<div id="loginScreen" style="display:none">
+  <div class="login-wrap">
+    <div class="monogram">M&C</div>
+    <h1 class="login-title">Marc & Caroline</h1>
+    <p class="login-sub">Chasse au trésor · 5 septembre 2025<br>Villa 180 Mer · L'Houmeau</p>
+    <div class="role-cards">
+      <div class="role-card" id="roleAdmin" onclick="selectRole('admin')">
+        <div class="role-icon">⚙️</div>
+        <div><div class="role-card-title">Administrateur</div><div class="role-card-desc">Configurer, valider les photos, scores</div></div>
+      </div>
+      <div class="role-card" id="roleGM" onclick="selectRole('gm')">
+        <div class="role-icon">🎯</div>
+        <div><div class="role-card-title">Game Master</div><div class="role-card-desc">Gérer votre épreuve</div></div>
+      </div>
+      <div class="role-card" id="rolePlayer" onclick="enterPlayerMode()">
+        <div class="role-icon">👥</div>
+        <div><div class="role-card-title">Mode Joueur</div><div class="role-card-desc">Voir les équipes et participants</div></div>
+      </div>
+    </div>
+    <div class="field" style="width:100%">
+      <div class="field-label">Code PIN (Admin ou Game Master)</div>
+      <input type="password" id="pinInput" class="pin-input" placeholder="••••" maxlength="8" inputmode="numeric" onkeydown="if(event.key==='Enter') doLogin()">
+    </div>
+    <button class="btn btn-gold btn-full" onclick="doLogin()">Entrer</button>
+    <div class="err-msg" id="loginErr" style="display:none">PIN incorrect</div>
+  </div>
+</div>
+
+<!-- ADMIN -->
+<div id="adminApp" style="display:none">
+  <div class="app-header">
+    <div>
+      <div class="app-header-title">Administration <span class="sync-indicator"><span class="sync-dot"></span>Live</span></div>
+      <div class="app-header-sub">Marc & Caroline · 5 sept. 2025</div>
+    </div>
+    <button class="logout-btn" onclick="logout()">Quitter</button>
+  </div>
+  <div class="nav-tabs" id="adminNavTabs">
+    <button class="nav-tab active" onclick="adminTab('epreuves',this)">Épreuves</button>
+    <button class="nav-tab" onclick="adminTab('equipes',this)">Équipes</button>
+    <button class="nav-tab" onclick="adminTab('joueurs',this)">Joueurs</button>
+    <button class="nav-tab" onclick="adminTab('config',this)">Config</button>
+    <button class="nav-tab" onclick="adminTab('scores',this)">Scores</button>
+    <button class="nav-tab" onclick="adminTab('photos',this)">Photos <span class="notif-badge" id="adminPhotoBadge">0</span></button>
+    <button class="nav-tab" onclick="adminTab('archive',this)">Archive</button>
+    <button class="nav-tab" onclick="adminTab('petitbac',this)">Petit Bac</button>
+    <button class="nav-tab" onclick="adminTab('classement',this)">Classement</button>
+    <button class="nav-tab" onclick="adminTab('reset',this)">Reset</button>
+  </div>
+  <div id="aEpreuves" class="page active"><div class="ep-tabs" id="adminEpTabs"></div><div id="adminEpEditor"></div></div>
+  <div id="aEquipes" class="page">
+    <div class="card"><div class="card-title">Noms des équipes</div><div id="teamNameFields"></div>
+    <button class="btn btn-gold" onclick="saveTeams()">Enregistrer</button><span class="save-msg" id="teamSaveMsg">Sauvegardé ✓</span></div>
+  </div>
+  <div id="aJoueurs" class="page">
+    <div class="card">
+      <div class="card-title">Ajouter un joueur</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input type="text" id="newPlayerName" placeholder="Prénom Nom" style="flex:1;font-size:14px;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif">
+        <select id="newPlayerTeam" style="width:130px;font-size:13px;padding:9px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif" id="newPlayerTeamSelect"></select>
+      </div>
+      <button class="btn btn-gold btn-sm" onclick="addJoueur()">+ Ajouter</button>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card-title" style="margin:0">Liste des joueurs</div>
+        <span id="joueurCount" style="font-size:12px;color:var(--ink-muted)"></span>
+      </div>
+      <div id="joueursList"></div>
+    </div>
+  </div>
+  <div id="aConfig" class="page">
+    <div class="card">
+      <div class="card-title">Codes PIN</div>
+      <div class="notice">Chaque game master a son propre code lié à son épreuve.</div>
+      <div id="pinConfigFields"></div>
+      <button class="btn btn-gold" onclick="savePins()">Enregistrer les codes</button>
+      <span class="save-msg" id="pinSaveMsg">Sauvegardé ✓</span>
+    </div>
+  </div>
+  <div id="aScores" class="page"><div class="stat-grid" id="adminStatGrid"></div><div class="score-table-wrap" id="adminScoreTable"></div></div>
+  <div id="aPhotos" class="page"><div id="adminPhotosContent"></div></div>
+  <div id="aArchive" class="page"><div id="adminArchiveContent"></div></div>
+  <div id="aPetitBac" class="page"><div id="adminPetitBacContent"></div></div>
+  <div id="aClassement" class="page"><div id="adminLeaderboard"></div><button class="btn btn-sm" style="margin-top:1rem" onclick="renderLeaderboard('adminLeaderboard')">Actualiser</button></div>
+  <div id="aReset" class="page">
+    <div class="warn">⚠️ Remet les scores à zéro et archive toutes les photos.</div>
+    <button class="btn btn-danger" onclick="openResetModal()">Réinitialiser et archiver</button>
+  </div>
+</div>
+
+<!-- GAME MASTER -->
+<div id="gmApp" style="display:none">
+  <div class="app-header">
+    <div>
+      <div class="app-header-title" id="gmHeaderTitle">Game Master</div>
+      <div class="app-header-sub">Marc & Caroline · 5 sept. 2025</div>
+    </div>
+    <button class="logout-btn" onclick="logout()">Quitter</button>
+  </div>
+  <div class="gm-epreuve-banner">
+    <div class="gm-epreuve-name" id="gmEpreuveName"></div>
+    <div class="gm-epreuve-sub" id="gmEpreuveSub"></div>
+  </div>
+  <div class="nav-tabs" id="gmNavTabs">
+    <button class="nav-tab" id="gmPhotoTab" onclick="gmTab('photos',this)" style="display:none">📸 Photos <span class="notif-badge" id="gmPhotoBadge">0</span></button>
+    <button class="nav-tab" id="gmPetitBacTab" onclick="gmTab('petitbac',this)" style="display:none">🏙 Jeu</button>
+    <button class="nav-tab active" id="gmInstrTab" onclick="gmTab('instructions',this)">Instructions</button>
+    <button class="nav-tab" id="gmScoreTab" onclick="gmTab('saisie',this)">Scores</button>
+    <button class="nav-tab" id="gmScoreFinTab" onclick="gmTab('scorefin',this)" style="display:none">🏆 Score final</button>
+    <button class="nav-tab" onclick="gmTab('lb',this)">Classement</button>
+  </div>
+  <div id="gPhotos" class="page"><div id="gmPhotoChallengeContent"></div></div>
+  <div id="gInstructions" class="page active"><div id="gmInstructionsContent"></div></div>
+  <div id="gPetitBac" class="page"><div id="gmPetitBacContent"></div></div>
+  <div id="gScoreFin" class="page"><div id="gmScoreFinContent"></div></div>
+  <div id="gSaisie" class="page">
+    <div class="card"><div class="card-title">Sélectionner une équipe</div><div class="team-grid" id="gmTeamSel"></div></div>
+    <div id="gmScoreForm" style="display:none">
+      <div class="card">
+        <div class="card-title" id="gmScoreTitle">—</div><div class="divider"></div>
+        <div class="score-row">
+          <span class="score-lbl" id="gmScoreLbl">Score</span>
+          <input class="score-input-sm" type="number" id="gmScoreVal" min="0" inputmode="numeric" placeholder="0">
+          <span id="gmScoreMax" style="font-size:12px;color:var(--ink-muted)"></span>
+        </div>
+        <!-- Adjustment note shown when locked -->
+        <div id="gmAdjustNote" style="display:none;align-items:center;gap:8px;background:var(--amber-bg);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--amber)">
+          <span>🔒 Épreuve verrouillée</span>
+          <button class="btn btn-sm" style="margin-left:auto;font-size:12px;padding:4px 12px" onclick="unlockGMScore()">Déverrouiller pour ajuster</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <button id="gmSaveFinalBtn" class="btn btn-gold" onclick="lockGMScore()">✓ Valider et verrouiller</button>
+          <button class="btn btn-sm" id="gmLockBtn" onclick="saveGMScore()" style="display:none">Sauvegarder</button>
+          <span class="save-msg" id="gmSaveMsg">Sauvegardé ✓</span>
+        </div>
+        <div style="font-size:11px;color:var(--ink-muted);margin-top:8px">Une fois validé, l'équipe ne peut plus refaire l'épreuve.</div>
+      </div>
+    </div>
+  </div>
+  <div id="gLb" class="page"><div id="gmLeaderboard"></div><button class="btn btn-sm" style="margin-top:1rem" onclick="renderLeaderboard('gmLeaderboard')">Actualiser</button></div>
+</div>
+
+<!-- MODE JOUEUR -->
+<div id="playerApp" style="display:none">
+  <div class="player-app-header">
+    <div class="player-title">Marc & Caroline</div>
+    <div class="player-sub">Chasse au trésor · 5 septembre 2025</div>
+  </div>
+  <div style="padding:16px">
+    <div style="font-size:13px;color:var(--ink-muted);margin-bottom:16px;text-align:center">Participants par équipe</div>
+    <div id="playerTeamsContent"></div>
+    <button class="btn btn-sm btn-full" style="margin-top:8px" onclick="logout()" >← Retour</button>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div class="modal-backdrop" id="resetModal">
+  <div class="modal">
+    <div class="modal-title">Réinitialiser</div>
+    <div class="modal-desc">Les scores seront remis à zéro. Les photos seront archivées.</div>
+    <div class="field" style="text-align:left;margin-bottom:1rem">
+      <div class="field-label">Nom de la session</div>
+      <input type="text" id="archiveLabel" placeholder="ex: Test du 1er août" style="font-size:14px">
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-sm" onclick="closeResetModal()">Annuler</button>
+      <button class="btn btn-sm btn-danger" onclick="confirmReset()">Confirmer</button>
+    </div>
+  </div>
+</div>
+<div class="photo-viewer-backdrop" id="photoViewer" onclick="closePhotoViewer()">
+  <button class="photo-viewer-close" onclick="closePhotoViewer()">✕</button>
+  <img class="photo-viewer-img" id="photoViewerImg" src="" alt="">
+</div>
+<input type="file" id="fileChallenge1" accept="image/*" onchange="handleChallengePhoto(event,1)">
+<input type="file" id="fileChallenge2" accept="image/*" onchange="handleChallengePhoto(event,2)">
+
+<script>
+const SUPABASE_URL='https://ktpiwlcazmodfezrwlqf.supabase.co';
+const SUPABASE_KEY='sb_publishable_rcKC1bFMte1P2qW6OSdiTw_w4KoVfQl';
+
+// Catch any JS error and show it on screen
+window.onerror = function(msg, src, line, col, err) {
+  const el = document.getElementById('loaderError');
+  const loader = document.getElementById('globalLoader');
+  if(el) { el.style.display='block'; el.textContent = 'Erreur JS ligne '+line+': '+msg; }
+  console.error('JS Error:', msg, 'line:', line, err);
+  return false;
+};
+
+window.onunhandledrejection = function(e) {
+  const el = document.getElementById('loaderError');
+  if(el) { el.style.display='block'; el.textContent = 'Erreur async: '+(e.reason?.message||e.reason||'inconnue'); }
+  console.error('Unhandled rejection:', e.reason);
+};
+
+const {createClient}=supabase;
+// Note: using publishable key as the anon key parameter
+const db=createClient(SUPABASE_URL,SUPABASE_KEY,{
+  auth:{persistSession:false,autoRefreshToken:false}
+});
+
+const MAX_ATTEMPTS=5;
+// Scoring par essai : 10pts au 1er, puis -2 par essai raté (8, 6, 4, 2)
+// Si aucun bon après 5 essais : 0pt
+const POINTS_BY_ATTEMPT=[10,8,6,4,2];
+const SESSION_KEY='mc_wedding_session_v2';
+
+let currentRole=null,currentGMStation=null,currentGMTeam=null,currentPhotoTeam=null;
+let currentEpTab=1,pendingPhotoCount=0,gmRefusedCount=0;
+let challengeState={};
+let appData={teams:[],epreuves:[],scores:{},questions:{},joueurs:[],villesBac:{}};
+let pins={admin:'1234',gm:{1:'5678',2:'5679',3:'5680',4:'5681'}};
+
+// ===================== SESSION =====================
+function saveSession(){
+  try{localStorage.setItem(SESSION_KEY,JSON.stringify({role:currentRole,station:currentGMStation,ts:Date.now()}));}catch(e){}
+}
+function loadSession(){
+  try{
+    const s=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');
+    if(!s||Date.now()-s.ts>12*60*60*1000){localStorage.removeItem(SESSION_KEY);return null;}
+    return s;
+  }catch(e){return null;}
+}
+function clearSession(){try{localStorage.removeItem(SESSION_KEY);}catch(e){}}
+
+// ===================== INIT =====================
+async function safeLoad(query){
+  try{ const {data,error}=await query; if(error) return []; return data||[]; }
+  catch(e){ return []; }
+}
+
+async function init(){
+  try{
+    const [epreuves,equipes,scores,questions,configRows,joueurs,villesBac]=await Promise.all([
+      safeLoad(db.from('epreuves').select('*').order('id')),
+      safeLoad(db.from('equipes').select('*').order('id')),
+      safeLoad(db.from('scores').select('*')),
+      safeLoad(db.from('questions').select('*').order('ordre')),
+      safeLoad(db.from('config').select('*')),
+      safeLoad(db.from('joueurs').select('*').order('nom')),
+      safeLoad(db.from('villes_bac').select('*').order('lettre').order('ville'))
+    ]);
+    appData.epreuves=epreuves;
+    appData.teams=equipes.map(e=>e.nom);
+    appData.joueurs=joueurs;
+    appData.villesBac={};
+    villesBac.forEach(row=>{
+      const l=(row.lettre||'').toUpperCase();
+      if(!appData.villesBac[l]) appData.villesBac[l]=[];
+      appData.villesBac[l].push(row.ville);
+    });
+    appData.questions={};
+    questions.forEach(q=>{if(!appData.questions[q.epreuve_id])appData.questions[q.epreuve_id]=[];appData.questions[q.epreuve_id].push(q);});
+    appData.scores={};
+    appData.locked={};  // {teamName: {epId: true/false}}
+    appData.teams.forEach(t=>{
+      appData.scores[t]={};
+      appData.locked[t]={};
+      appData.epreuves.forEach(e=>{appData.scores[t][e.id]=null;appData.locked[t][e.id]=false;});
+    });
+    scores.forEach(s=>{
+      if(appData.scores[s.equipe_nom]){
+        appData.scores[s.equipe_nom][s.epreuve_id]=s.score;
+        appData.locked[s.equipe_nom][s.epreuve_id]=s.locked||false;
+      }
+    });
+    configRows.forEach(r=>{
+      if(r.key==='pin_admin') pins.admin=r.value;
+      if(r.key==='pin_gm_1') pins.gm[1]=r.value;
+      if(r.key==='pin_gm_2') pins.gm[2]=r.value;
+      if(r.key==='pin_gm_3') pins.gm[3]=r.value;
+      if(r.key==='pin_gm_4') pins.gm[4]=r.value;
+    });
+    appData.teams.forEach(t=>{challengeState[t]={1:{attempts:[],done:false,points:0},2:{attempts:[],done:false,points:0}};});
+    await loadChallengeState();
+  }catch(e){console.error('Init error:',e);}
+
+  document.getElementById('globalLoader').style.display='none';
+  // Safety: always hide loader after 8s max
+  setTimeout(()=>{
+    const loader=document.getElementById('globalLoader');
+    if(loader&&loader.style.display!=='none'){
+      loader.style.display='none';
+      document.getElementById('loginScreen').style.display='block';
+      console.warn('Loader timeout - forcing login screen');
+    }
+  },8000);
+
+  const session=loadSession();
+  if(session?.role){
+    currentRole=session.role; currentGMStation=session.station||null;
+    if(currentRole==='admin') enterAdmin();
+    else if(currentRole==='gm'&&currentGMStation) enterGM();
+    else if(currentRole==='player') enterPlayerMode();
+    else document.getElementById('loginScreen').style.display='block';
+  } else {
+    document.getElementById('loginScreen').style.display='block';
+  }
+}
+
+async function loadChallengeState(){
+  try{
+    const photos=await safeLoad(db.from('photos').select('*').eq('epreuve_id',1).order('created_at'));
+    appData.teams.forEach(t=>{
+      challengeState[t]={1:{attempts:[],done:false,points:0},2:{attempts:[],done:false,points:0}};
+    });
+    photos.forEach(p=>{
+      const ch=p.challenge_num||1;
+      if(!challengeState[p.equipe_nom]) challengeState[p.equipe_nom]={1:{attempts:[],done:false,points:0},2:{attempts:[],done:false,points:0}};
+      const st=challengeState[p.equipe_nom][ch];
+      st.attempts.push(p);
+      if(p.statut==='validee'){st.done=true;st.points=p.points||0;}
+    });
+    Object.values(challengeState).forEach(cs=>{
+      [1,2].forEach(ch=>{
+        if(cs[ch].attempts.length>=MAX_ATTEMPTS&&!cs[ch].done){cs[ch].done=true;cs[ch].points=0;}
+      });
+    });
+  }catch(e){console.error('loadChallengeState error:',e);}
+}
+
+// ===================== REALTIME =====================
+function subscribeRealtime(){
+  db.channel('scores-live-'+currentRole).on('postgres_changes',{event:'*',schema:'public',table:'scores'},payload=>{
+    const s=payload.new;
+    if(s&&appData.scores[s.equipe_nom]!==undefined){
+      appData.scores[s.equipe_nom][s.epreuve_id]=s.score;
+      if(!appData.locked[s.equipe_nom]) appData.locked[s.equipe_nom]={};
+      appData.locked[s.equipe_nom][s.epreuve_id]=s.locked||false;
+      if(currentRole==='admin'){renderAdminScores();renderLeaderboard('adminLeaderboard');}
+      if(currentRole==='gm') renderLeaderboard('gmLeaderboard');
+    }
+  }).subscribe();
+
+  db.channel('photos-insert-'+currentRole).on('postgres_changes',{event:'INSERT',schema:'public',table:'photos'},async payload=>{
+    const p=payload.new;
+    if(currentRole==='admin'){
+      pendingPhotoCount++;updateAdminPhotoBadge();
+      showAdminPhotoToast(p);
+      renderAdminPhotos();
+    }
+    if(currentRole==='gm'&&p.epreuve_id===currentGMStation){
+      // Reload full challenge state to ensure dots are accurate
+      await loadChallengeState();
+      if(currentPhotoTeam) renderPhotoChallengeUI(currentPhotoTeam);
+    }
+  }).subscribe();
+
+  db.channel('photos-update-'+currentRole).on('postgres_changes',{event:'UPDATE',schema:'public',table:'photos'},async payload=>{
+    const p=payload.new;
+    if(currentRole==='gm'&&p.epreuve_id===currentGMStation){
+      await loadChallengeState();
+      handlePhotoStatusUpdateGM(p);
+    }
+    if(currentRole==='admin'){renderAdminPhotos();renderAdminScores();renderLeaderboard('adminLeaderboard');}
+  }).subscribe();
+
+  db.channel('config-live-'+currentRole).on('postgres_changes',{event:'UPDATE',schema:'public',table:'config'},payload=>{
+    const r=payload.new;
+    if(r.key==='pin_admin') pins.admin=r.value;
+    if(r.key.startsWith('pin_gm_')) pins.gm[parseInt(r.key.slice(-1))]=r.value;
+  }).subscribe();
+}
+
+// ===================== TOASTS =====================
+function showToast({icon='📸',title,msg='',type='',actions=[],duration=5000}){
+  const el=document.createElement('div');
+  el.className=`toast ${type}`;
+  const act=actions.map(a=>`<button class="toast-btn ${a.cls||''}" onclick="${a.fn}">${a.label}</button>`).join('');
+  el.innerHTML=`<span class="toast-icon">${icon}</span><div class="toast-body"><div class="toast-title">${title}</div>${msg?`<div class="toast-msg">${msg}</div>`:''} ${act?`<div class="toast-actions">${act}</div>`:''}</div>`;
+  document.getElementById('toastContainer').appendChild(el);
+  if(duration) setTimeout(()=>el.remove(),duration);
+}
+function showAdminPhotoToast(p){
+  const ch=p.challenge_num||1;
+  showToast({
+    icon:'📸',title:'Nouvelle photo à valider',
+    msg:`${p.equipe_nom} · Challenge ${ch===1?'Caroline':'Marc'} · Essai n°${p.attempt_num||'?'}`,
+    actions:[
+      {label:'Valider ✓',cls:'toast-btn-ok',fn:`adminValidatePhoto(true,${p.id});this.closest('.toast').remove()`},
+      {label:'Refuser ✗',cls:'toast-btn-no',fn:`adminValidatePhoto(false,${p.id});this.closest('.toast').remove()`}
+    ],
+    duration:15000
+  });
+}
+function updateAdminPhotoBadge(){
+  const b=document.getElementById('adminPhotoBadge');
+  pendingPhotoCount>0?(b.textContent=pendingPhotoCount,b.classList.add('visible')):b.classList.remove('visible');
+}
+function updateGMPhotoBadge(n){
+  const b=document.getElementById('gmPhotoBadge');
+  n>0?(b.textContent=n,b.classList.add('visible')):b.classList.remove('visible');
+}
+async function handlePhotoStatusUpdateGM(photo){
+  const ch=photo.challenge_num||1;
+  const st=challengeState[photo.equipe_nom]?.[ch];
+  if(!st) return;
+  if(photo.statut==='validee'){
+    const total=(challengeState[photo.equipe_nom][1].points||0)+(challengeState[photo.equipe_nom][2].points||0);
+    appData.scores[photo.equipe_nom][1]=total;
+    await db.from('scores').upsert({equipe_nom:photo.equipe_nom,epreuve_id:1,score:total,updated_at:new Date().toISOString()},{onConflict:'equipe_nom,epreuve_id'});
+    showToast({icon:'✅',title:`Photo validée — +${photo.points} pts`,msg:`Challenge ${ch===1?'Caroline':'Marc'} · ${photo.equipe_nom}`,type:'success',duration:6000});
+    showPointsPop(photo.points);
+  } else {
+    const remaining=MAX_ATTEMPTS-st.attempts.length;
+    gmRefusedCount++;updateGMPhotoBadge(gmRefusedCount);
+    showToast({icon:'❌',title:'Photo refusée',msg:remaining>0?`${remaining} essai${remaining>1?'s':''} restant${remaining>1?'s':''}`:`Plus d'essais — 0 pt`,type:'danger',duration:8000});
+  }
+  if(currentPhotoTeam===photo.equipe_nom) renderPhotoChallengeUI(currentPhotoTeam);
+}
+function showPointsPop(pts){
+  const el=document.createElement('div');el.className='points-pop';el.textContent='+'+pts+' pts';
+  el.style.cssText=`left:${Math.random()*40+30}%;top:55%`;
+  document.body.appendChild(el);setTimeout(()=>el.remove(),1700);
+}
+
+// ===================== LOGIN =====================
+function selectRole(r){
+  document.getElementById('roleAdmin').classList.toggle('selected',r==='admin');
+  document.getElementById('roleGM').classList.toggle('selected',r==='gm');
+  document.getElementById('rolePlayer').classList.remove('selected');
+  currentRole=r;
+}
+
+async function doLogin(){
+  const pin=document.getElementById('pinInput').value;
+  const err=document.getElementById('loginErr');
+  err.style.display='none';
+  if(pin===pins.admin){currentRole='admin';enterAdmin();saveSession();return;}
+  for(let i=1;i<=4;i++){
+    if(pin===pins.gm[i]){currentRole='gm';currentGMStation=i;enterGM();saveSession();return;}
+  }
+  err.style.display='block';
+}
+
+function enterPlayerMode(){
+  currentRole='player';
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('playerApp').style.display='block';
+  saveSession();
+  renderPlayerMode();
+}
+
+async function enterAdmin(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('adminApp').style.display='block';
+  subscribeRealtime();
+  const {data:pending}=await db.from('photos').select('id').eq('statut','en_attente');
+  pendingPhotoCount=(pending||[]).length;updateAdminPhotoBadge();
+  renderAdminEpreuves();renderTeamFields();renderJoueurs();renderPinConfig();renderAdminScores();renderAdminPhotos();renderLeaderboard('adminLeaderboard');
+}
+
+function enterGM(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('gmApp').style.display='block';
+  subscribeRealtime();
+  setupGMInterface();
+}
+
+function setupGMInterface(){
+  const ep=appData.epreuves.find(e=>e.id===currentGMStation);
+  if(!ep) return;
+  document.getElementById('gmEpreuveName').textContent=ep.title;
+  document.getElementById('gmEpreuveSub').textContent='';
+
+  const photoTab=document.getElementById('gmPhotoTab');
+  const scoreTab=document.getElementById('gmScoreTab');
+  const petitBacTab=document.getElementById('gmPetitBacTab');
+  const scoreFinTab=document.getElementById('gmScoreFinTab');
+
+  // Hide all optional tabs first
+  photoTab.style.display='none';
+  scoreTab.style.display='none';
+  petitBacTab.style.display='none';
+  scoreFinTab.style.display='none';
+
+  if(currentGMStation===1){
+    photoTab.style.display='inline-flex';
+    document.querySelectorAll('#gmNavTabs .nav-tab').forEach(b=>b.classList.remove('active'));
+    photoTab.classList.add('active');
+    document.querySelectorAll('#gmApp .page').forEach(p=>p.classList.remove('active'));
+    document.getElementById('gPhotos').classList.add('active');
+    renderGMPhotoChallengeSelector();
+  } else if(ep.type==='villes'){
+    petitBacTab.style.display='inline-flex';
+    // Score final tab hidden — score is shown at end of game screen directly
+    document.querySelectorAll('#gmNavTabs .nav-tab').forEach(b=>b.classList.remove('active'));
+    petitBacTab.classList.add('active');
+    document.querySelectorAll('#gmApp .page').forEach(p=>p.classList.remove('active'));
+    document.getElementById('gPetitBac').classList.add('active');
+    renderPetitBacGameScreen();
+  } else {
+    scoreTab.style.display='inline-flex';
+  }
+
+  renderGMInstructions();
+  renderGMTeamSel();
+  renderLeaderboard('gmLeaderboard');
+}
+
+function logout(){
+  clearSession();
+  currentRole=null;currentGMStation=null;currentGMTeam=null;currentPhotoTeam=null;
+  pendingPhotoCount=0;gmRefusedCount=0;
+  ['adminApp','gmApp','playerApp'].forEach(id=>document.getElementById(id).style.display='none');
+  document.getElementById('loginScreen').style.display='block';
+  document.getElementById('pinInput').value='';
+  document.getElementById('loginErr').style.display='none';
+  ['roleAdmin','roleGM','rolePlayer'].forEach(id=>document.getElementById(id).classList.remove('selected'));
+}
+
+// ===================== NAV =====================
+function adminTab(name,btn){
+  document.querySelectorAll('#adminApp .page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('#adminNavTabs .nav-tab').forEach(b=>b.classList.remove('active'));
+  const map={epreuves:'aEpreuves',equipes:'aEquipes',joueurs:'aJoueurs',config:'aConfig',scores:'aScores',photos:'aPhotos',archive:'aArchive',petitbac:'aPetitBac',classement:'aClassement',reset:'aReset'};
+  document.getElementById(map[name]).classList.add('active');btn.classList.add('active');
+  if(name==='scores') renderAdminScores();
+  if(name==='photos'){renderAdminPhotos();pendingPhotoCount=0;updateAdminPhotoBadge();}
+  if(name==='archive') renderAdminArchive();
+  if(name==='petitbac') renderAdminPetitBac();
+  if(name==='classement') renderLeaderboard('adminLeaderboard');
+  if(name==='joueurs') renderJoueurs();
+}
+function gmTab(name,btn){
+  document.querySelectorAll('#gmApp .page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('#gmNavTabs .nav-tab').forEach(b=>b.classList.remove('active'));
+  const map={photos:'gPhotos',instructions:'gInstructions',petitbac:'gPetitBac',saisie:'gSaisie',scorefin:'gScoreFin',lb:'gLb'};
+  document.getElementById(map[name]).classList.add('active');btn.classList.add('active');
+  if(name==='lb') renderLeaderboard('gmLeaderboard');
+  if(name==='photos'){gmRefusedCount=0;updateGMPhotoBadge(0);}
+  if(name==='petitbac') renderPetitBacGameScreen();
+  if(name==='scorefin') renderPetitBacScoreFin();
+}
+
+// ===================== PIN CONFIG =====================
+function renderPinConfig(){
+  const ep=id=>appData.epreuves.find(e=>e.id===id);
+  document.getElementById('pinConfigFields').innerHTML=`
+    <div class="pin-config-row"><span class="pin-config-label">Administrateur</span><input class="pin-config-input" type="text" id="pinAdmin" value="${pins.admin}" maxlength="8" inputmode="numeric"></div>
+    ${[1,2,3,4].map(i=>`<div class="pin-config-row"><span class="pin-config-label">GM ${i}${ep(i)?' — '+ep(i).title:''}</span><input class="pin-config-input" type="text" id="pinGm${i}" value="${pins.gm[i]||''}" maxlength="8" inputmode="numeric"></div>`).join('')}`;
+}
+async function savePins(){
+  pins.admin=document.getElementById('pinAdmin').value||pins.admin;
+  for(let i=1;i<=4;i++){const v=document.getElementById('pinGm'+i).value;if(v) pins.gm[i]=v;}
+  await Promise.all([
+    db.from('config').upsert({key:'pin_admin',value:pins.admin},{onConflict:'key'}),
+    ...[1,2,3,4].map(i=>db.from('config').upsert({key:'pin_gm_'+i,value:pins.gm[i]},{onConflict:'key'}))
+  ]);
+  showSaveMsg('pinSaveMsg');
+  showToast({icon:'🔑',title:'Codes PIN mis à jour',duration:3000});
+}
+
+// ===================== ADMIN: JOUEURS =====================
+function renderJoueurs(){
+  const count=appData.joueurs.length;
+  document.getElementById('joueurCount').textContent=count+' joueur'+(count>1?'s':'');
+  // Populate team select for new player
+  const sel=document.getElementById('newPlayerTeam');
+  if(sel) sel.innerHTML='<option value="">Sans équipe</option>'+appData.teams.map(t=>`<option value="${t}">${t}</option>`).join('');
+  if(!appData.joueurs.length){
+    document.getElementById('joueursList').innerHTML='<div style="font-size:13px;color:var(--ink-muted);padding:8px 0">Aucun joueur pour le moment.</div>';
+    return;
+  }
+  // Group by team
+  const byTeam={};
+  appData.joueurs.forEach(j=>{
+    const k=j.equipe_nom||'Sans équipe';
+    if(!byTeam[k]) byTeam[k]=[];
+    byTeam[k].push(j);
+  });
+  const teamOrder=[...appData.teams,'Sans équipe'];
+  let html='';
+  teamOrder.forEach(t=>{
+    if(!byTeam[t]||!byTeam[t].length) return;
+    html+=`<div style="font-size:12px;font-weight:500;color:var(--gold-dark);margin:10px 0 4px;padding-left:2px">${t}</div>`;
+    byTeam[t].sort((a,b)=>a.nom.localeCompare(b.nom,'fr')).forEach(j=>{
+      html+=`<div class="joueur-row">
+        <span class="joueur-nom">${j.nom}</span>
+        <select class="joueur-equipe-select" onchange="updateJoueurEquipe(${j.id},this.value)">
+          <option value="">Sans équipe</option>
+          ${appData.teams.map(t2=>`<option value="${t2}"${t2===j.equipe_nom?' selected':''}>${t2}</option>`).join('')}
+        </select>
+        <button class="joueur-delete" onclick="deleteJoueur(${j.id})" title="Supprimer">✕</button>
+      </div>`;
+    });
+  });
+  document.getElementById('joueursList').innerHTML=html;
+}
+async function addJoueur(){
+  const nom=document.getElementById('newPlayerName').value.trim();
+  if(!nom) return;
+  const equipe=document.getElementById('newPlayerTeam').value||null;
+  const {data:j}=await db.from('joueurs').insert({nom,equipe_nom:equipe}).select().single();
+  if(j){appData.joueurs.push(j);appData.joueurs.sort((a,b)=>a.nom.localeCompare(b.nom,'fr'));}
+  document.getElementById('newPlayerName').value='';
+  renderJoueurs();
+  showToast({icon:'👤',title:`${nom} ajouté`,duration:2500});
+}
+async function updateJoueurEquipe(id,equipe){
+  await db.from('joueurs').update({equipe_nom:equipe||null}).eq('id',id);
+  const j=appData.joueurs.find(x=>x.id===id);
+  if(j) j.equipe_nom=equipe||null;
+  renderJoueurs();
+}
+async function deleteJoueur(id){
+  await db.from('joueurs').delete().eq('id',id);
+  appData.joueurs=appData.joueurs.filter(j=>j.id!==id);
+  renderJoueurs();
+}
+
+// ===================== MODE JOUEUR =====================
+function renderPlayerMode(){
+  const byTeam={};
+  appData.teams.forEach(t=>{byTeam[t]=[];});
+  appData.joueurs.forEach(j=>{
+    if(j.equipe_nom&&byTeam[j.equipe_nom]) byTeam[j.equipe_nom].push(j);
+  });
+  const colors=['#E8D9B8','#D4E8D0','#D0DCE8','#E8D0D8'];
+  let html='';
+  appData.teams.forEach((t,idx)=>{
+    const players=byTeam[t].sort((a,b)=>a.nom.localeCompare(b.nom,'fr'));
+    html+=`<div class="equipe-section">
+      <div class="equipe-section-title" style="background:${colors[idx%colors.length]}">
+        <span class="equipe-section-name">${t}</span>
+        <span class="equipe-section-count">${players.length} joueur${players.length!==1?'s':''}</span>
+      </div>
+      ${players.length?players.map(p=>`<div class="player-item">
+        <div class="player-avatar">${p.nom.charAt(0).toUpperCase()}</div>
+        <div class="player-name">${p.nom}</div>
+      </div>`).join(''):'<div style="font-size:13px;color:var(--ink-muted);padding:8px 14px">Aucun joueur assigné</div>'}
+    </div>`;
+  });
+  document.getElementById('playerTeamsContent').innerHTML=html||'<div class="notice">Aucun joueur enregistré pour le moment.</div>';
+}
+
+// ===================== ADMIN: EPREUVES =====================
+function renderAdminEpreuves(){
+  document.getElementById('adminEpTabs').innerHTML=appData.epreuves.map(e=>`<button class="ep-tab${e.id===currentEpTab?' active':''}" onclick="switchEpTab(${e.id},this)">${e.title}</button>`).join('');
+  renderEpEditor();
+}
+function switchEpTab(id,btn){currentEpTab=id;document.querySelectorAll('.ep-tab').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderEpEditor();}
+function renderEpEditor(){
+  const ep=appData.epreuves.find(e=>e.id===currentEpTab);
+  const qs=appData.questions[ep.id]||[];
+  let h=`<div class="card">
+    <div class="field"><div class="field-label">Titre de l'épreuve</div><input type="text" class="admin-input" id="epTitle" value="${ep.title||''}"></div>
+    <div class="field"><div class="field-label">Instructions</div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden">
+      <div style="display:flex;gap:2px;padding:6px 8px;background:var(--cream);border-bottom:1px solid var(--border);flex-wrap:wrap">
+        <button type="button" class="rte-btn" onclick="rteCmd('bold')" title="Gras"><b>B</b></button>
+        <button type="button" class="rte-btn" onclick="rteCmd('italic')" title="Italique"><i>I</i></button>
+        <button type="button" class="rte-btn" onclick="rteCmd('underline')" title="Souligné"><u>U</u></button>
+        <div style="width:1px;background:var(--border);margin:0 4px"></div>
+        <button type="button" class="rte-btn" onclick="rteColor('#B8975A')" title="Or" style="color:#B8975A;font-weight:700">A</button>
+        <button type="button" class="rte-btn" onclick="rteColor('#3A7C2A')" title="Vert" style="color:#3A7C2A;font-weight:700">A</button>
+        <button type="button" class="rte-btn" onclick="rteColor('#A32020')" title="Rouge" style="color:#A32020;font-weight:700">A</button>
+        <button type="button" class="rte-btn" onclick="rteColor('#1A4A8A')" title="Bleu" style="color:#1A4A8A;font-weight:700">A</button>
+        <button type="button" class="rte-btn" onclick="rteColor('')" title="Couleur normale" style="font-weight:700">A</button>
+        <div style="width:1px;background:var(--border);margin:0 4px"></div>
+        <button type="button" class="rte-btn" onclick="rteCmd('insertUnorderedList')" title="Liste">• —</button>
+      </div>
+      <div id="epInstr" contenteditable="true"
+        style="min-height:120px;padding:10px 12px;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--ink);line-height:1.7;outline:none;background:var(--warm-white)"
+        oninput="syncInstrToHidden()">${ep.instructions||''}</div>
+      <input type="hidden" id="epInstrHidden" value="${(ep.instructions||'').replace(/"/g,'&quot;')}">
+    </div></div>
+    <div class="field"><div class="field-label">Règle de scoring</div><input type="text" class="admin-input" id="epScoring" value="${ep.scoring||''}"></div>
+    <div class="field"><div class="field-label">Score maximum</div><input type="number" class="admin-input" id="epMax" value="${ep.max_score||10}" style="width:80px"></div>`;
+  if(ep.type==='photos'){
+    h+=`<div class="divider"></div><div class="notice">Épreuve photo automatique.<br>Challenge 1 (Caroline) + Challenge 2 (Marc)<br>1er essai = 10 pts · 2e = 8 pts · 3e = 6 pts · 4e = 4 pts · 5e = 2 pts · Aucun bon = 0 pt<br>Score total : 20 pts max</div>`;
+  }
+  if(ep.type==='qcm'){
+    h+=`<div class="divider"></div><div style="font-size:14px;font-weight:500;margin-bottom:10px">Questions</div>`;
+    qs.forEach((q,i)=>{const c=q.contenu||{};h+=`<div class="q-editor"><div class="field-label">Question ${i+1}</div><input type="text" class="admin-input" value="${c.q||''}" onchange="updateQLocal(${i},'q',this.value)" style="margin-bottom:8px"><div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${(c.opts||['Marc','Caroline','Les deux']).map((o,j)=>`<div style="display:flex;gap:6px;align-items:center"><input type="radio" name="correct${i}" value="${j}" ${j===(c.correct||0)?'checked':''} onchange="updateQLocal(${i},'correct',${j})" style="width:auto;accent-color:var(--gold)"><input type="text" value="${o}" onchange="updateQOptLocal(${i},${j},this.value)" style="flex:1;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px"></div>`).join('')}</div><button class="btn btn-sm btn-danger" onclick="removeQLocal(${i})">Supprimer</button></div>`;});
+    h+=`<button class="btn btn-sm" onclick="addQLocal()">+ Ajouter une question</button>`;
+  }
+  if(ep.type==='villes'){
+    h+=`<div class="divider"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:14px;font-weight:500">Villes par lettre</div>
+      <button class="btn btn-sm" onclick="initAllLettersAdmin()">Init A→Z</button>
+    </div>
+    <div class="notice" style="font-size:12px">Une ligne par ville. Cliquez "Init A→Z" pour créer les 26 lettres.</div>
+    <div id="villesBacEditor">${renderVillesBacEditor()}</div>`;
+  }
+  if(ep.type==='frise'){
+    h+=`<div class="divider"></div><div style="font-size:14px;font-weight:500;margin-bottom:10px">Étapes de la frise</div>`;
+    qs.forEach((q,i)=>{const c=q.contenu||{};h+=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><span style="font-family:'Playfair Display',serif;font-size:16px;color:var(--gold);min-width:22px">${i+1}</span><input type="text" value="${c.evenement||''}" placeholder="Événement..." onchange="updateFriseLocal(${i},'evenement',this.value)" style="flex:2;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px"><input type="text" value="${c.annee||''}" placeholder="Année" onchange="updateFriseLocal(${i},'annee',this.value)" style="width:70px;padding:8px 6px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center"><button class="btn btn-sm" onclick="removeFriseLocal(${i})" style="padding:6px 8px;color:var(--danger);border-color:var(--danger)">✕</button></div>`;});
+    h+=`<button class="btn btn-sm" onclick="addFriseLocal()">+ Ajouter une étape</button>`;
+  }
+  h+=`<div class="divider"></div><div style="display:flex;align-items:center;gap:10px">
+    <button class="btn btn-gold" onclick="${ep.type==='villes'?'saveVillesBacAndEpreuve()':'saveEpreuve()'}">Enregistrer</button>
+    <span class="save-msg" id="epSaveMsg">Sauvegardé ✓</span>
+  </div></div>`;
+  document.getElementById('adminEpEditor').innerHTML=h;
+}
+function getLocalQs(){return appData.questions[currentEpTab]||[];}
+function updateQLocal(i,f,v){getLocalQs()[i].contenu[f]=f==='correct'?parseInt(v):v;}
+function updateQOptLocal(i,j,v){getLocalQs()[i].contenu.opts[j]=v;}
+function addQLocal(){if(!appData.questions[currentEpTab])appData.questions[currentEpTab]=[];appData.questions[currentEpTab].push({epreuve_id:currentEpTab,ordre:appData.questions[currentEpTab].length,contenu:{q:'',opts:['Marc','Caroline','Les deux'],correct:0}});renderEpEditor();}
+function removeQLocal(i){appData.questions[currentEpTab].splice(i,1);renderEpEditor();}
+// ===================== ADMIN: VILLES BAC =====================
+function renderVillesBacEditor(){
+  const allLetters='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  let h='';
+  allLetters.forEach(l=>{
+    const villes=appData.villesBac[l]||[];
+    h+=`<div style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span style="font-size:16px;font-weight:500;color:var(--gold-dark);font-family:'Playfair Display',serif;min-width:22px">${l}</span>
+        <span style="font-size:11px;color:var(--ink-muted)">${villes.length} ville${villes.length!==1?'s':''}</span>
+        <button class="btn btn-sm" style="padding:3px 10px;font-size:11px" onclick="addVilleBac('${l}')">+ Ajouter</button>
+      </div>
+      <div id="villes_${l}">
+        ${villes.length ? villes.map((v,i)=>`
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
+            <input type="text" value="${v}" style="flex:1;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px" onchange="updateVilleBacLocal('${l}',${i},this.value)">
+            <button style="background:none;border:none;cursor:pointer;color:var(--ink-muted);font-size:16px;padding:4px" onclick="deleteVilleBac('${l}',${i})">✕</button>
+          </div>`).join('') : `<div style="font-size:12px;color:var(--ink-muted);font-style:italic;padding:4px 0">Aucune ville — cliquez + Ajouter</div>`}
+      </div>
+    </div>`;
+  });
+  return h;
+}
+
+function initAllLettersAdmin(){
+  // Already handled by renderVillesBacEditor showing all 26 letters
+  document.getElementById('villesBacEditor').innerHTML=renderVillesBacEditor();
+}
+
+function addVilleBac(lettre){
+  if(!appData.villesBac[lettre]) appData.villesBac[lettre]=[];
+  appData.villesBac[lettre].push('');
+  document.getElementById('villesBacEditor').innerHTML=renderVillesBacEditor();
+}
+
+function updateVilleBacLocal(lettre, idx, val){
+  if(!appData.villesBac[lettre]) appData.villesBac[lettre]=[];
+  appData.villesBac[lettre][idx]=val;
+}
+
+function deleteVilleBac(lettre, idx){
+  appData.villesBac[lettre].splice(idx,1);
+  document.getElementById('villesBacEditor').innerHTML=renderVillesBacEditor();
+}
+
+async function saveVillesBac(){
+  // Delete all and re-insert
+  await db.from('villes_bac').delete().neq('id',0);
+  const rows=[];
+  Object.entries(appData.villesBac).forEach(([lettre,villes])=>{
+    villes.forEach(v=>{if(v.trim()) rows.push({lettre,ville:v.trim()});});
+  });
+  if(rows.length) await db.from('villes_bac').insert(rows);
+  showToast({icon:'✅',title:`${rows.length} ville${rows.length>1?'s':''} sauvegardées`,type:'success',duration:3000});
+}
+function updateFriseLocal(i,f,v){getLocalQs()[i].contenu[f]=v;}
+function addFriseLocal(){if(!appData.questions[currentEpTab])appData.questions[currentEpTab]=[];const n=appData.questions[currentEpTab].length;appData.questions[currentEpTab].push({epreuve_id:currentEpTab,ordre:n,contenu:{evenement:'',annee:''}});renderEpEditor();}
+function removeFriseLocal(i){appData.questions[currentEpTab].splice(i,1);renderEpEditor();}
+async function saveVillesBacAndEpreuve(){
+  await saveEpreuve();
+  await saveVillesBac();
+  showSaveMsg('epSaveMsg');
+}
+async function saveEpreuve(){
+  const ep=appData.epreuves.find(e=>e.id===currentEpTab);
+  ep.title=document.getElementById('epTitle').value||ep.title;
+  // Read from contenteditable div (innerHTML preserves formatting)
+  const instrEl=document.getElementById('epInstr');
+  ep.instructions=instrEl ? instrEl.innerHTML : '';
+  ep.scoring=document.getElementById('epScoring').value;
+  ep.max_score=parseInt(document.getElementById('epMax').value)||10;
+  await db.from('epreuves').update({title:ep.title,instructions:ep.instructions,scoring:ep.scoring,max_score:ep.max_score}).eq('id',ep.id);
+  await db.from('questions').delete().eq('epreuve_id',ep.id);
+  const qs=(appData.questions[ep.id]||[]).map((q,i)=>({epreuve_id:ep.id,ordre:i,contenu:q.contenu}));
+  if(qs.length) await db.from('questions').insert(qs);
+  // Refresh tab labels to reflect new title
+  document.getElementById('adminEpTabs').innerHTML=appData.epreuves.map(e=>`<button class="ep-tab${e.id===currentEpTab?' active':''}" onclick="switchEpTab(${e.id},this)">${e.title}</button>`).join('');
+  showSaveMsg('epSaveMsg');
+}
+
+// ===================== ADMIN: EQUIPES =====================
+function renderTeamFields(){document.getElementById('teamNameFields').innerHTML=appData.teams.map((t,i)=>`<div class="field"><div class="field-label">Équipe ${i+1}</div><input type="text" class="admin-input" value="${t}" id="tname${i}"></div>`).join('');}
+async function saveTeams(){
+  const newTeams=appData.teams.map((_,i)=>document.getElementById('tname'+i).value||`Équipe ${i+1}`);
+  for(let i=0;i<appData.teams.length;i++){
+    await db.from('equipes').update({nom:newTeams[i]}).eq('nom',appData.teams[i]);
+    if(appData.scores[appData.teams[i]]){appData.scores[newTeams[i]]=appData.scores[appData.teams[i]];delete appData.scores[appData.teams[i]];}
+  }
+  appData.teams=newTeams;showSaveMsg('teamSaveMsg');
+}
+
+// ===================== ADMIN: SCORES =====================
+function renderAdminScores(){
+  const total=appData.teams.reduce((s,t)=>s+Object.values(appData.scores[t]||{}).reduce((a,b)=>a+(b||0),0),0);
+  document.getElementById('adminStatGrid').innerHTML=`
+    <div class="stat-card"><div class="stat-val">${appData.teams.length}</div><div class="stat-lbl">Équipes</div></div>
+    <div class="stat-card"><div class="stat-val">${appData.epreuves.reduce((a,e)=>a+(e.max_score||0),0)}</div><div class="stat-lbl">Points max</div></div>
+    <div class="stat-card"><div class="stat-val">${appData.epreuves.length}</div><div class="stat-lbl">Épreuves</div></div>
+    <div class="stat-card"><div class="stat-val">${total}</div><div class="stat-lbl">Total</div></div>`;
+  const headers=`<tr><th>Équipe</th>${appData.epreuves.map(e=>`<th>Ép.${e.id}</th>`).join('')}<th>Total</th></tr>`;
+  const rows=appData.teams.map(t=>{
+    const cells=appData.epreuves.map(e=>{const v=(appData.scores[t]||{})[e.id];return`<td><input class="score-input-table" type="number" value="${v==null?'':v}" min="0" max="${e.max_score}" inputmode="numeric" onchange="adminSetScore('${t}',${e.id},this.value)"></td>`;}).join('');
+    const tot=Object.values(appData.scores[t]||{}).reduce((a,b)=>a+(b||0),0);
+    return`<tr><td>${t}</td>${cells}<td style="font-weight:500;color:var(--gold-dark)">${tot}</td></tr>`;
+  }).join('');
+  document.getElementById('adminScoreTable').innerHTML=`<table class="score-table"><thead>${headers}</thead><tbody>${rows}</tbody></table>`;
+}
+async function adminSetScore(team,epId,val){
+  const v=val===''?0:Math.max(0,parseInt(val)||0);
+  appData.scores[team][epId]=v;
+  await db.from('scores').upsert({equipe_nom:team,epreuve_id:epId,score:v,updated_at:new Date().toISOString()},{onConflict:'equipe_nom,epreuve_id'});
+}
+
+// ===================== ADMIN: PHOTOS =====================
+async function renderAdminPhotos(){
+  const {data:photos}=await db.from('photos').select('*').order('created_at',{ascending:false});
+  const el=document.getElementById('adminPhotosContent');
+  if(!photos||!photos.length){el.innerHTML='<div class="notice">Aucune photo soumise pour le moment.</div>';return;}
+  const pending=photos.filter(p=>p.statut==='en_attente');
+  const done=photos.filter(p=>p.statut!=='en_attente');
+  let html='';
+  if(pending.length){html+=`<div style="font-size:14px;font-weight:500;margin-bottom:12px;color:var(--amber)">⏳ En attente (${pending.length})</div>`;html+=pending.map(adminPhotoCard).join('');if(done.length)html+=`<div class="divider" style="margin:16px 0"></div>`;}
+  if(done.length){html+=`<div style="font-size:14px;font-weight:500;margin-bottom:12px">Traitées</div>`;html+=done.map(adminPhotoCard).join('');}
+  el.innerHTML=html;
+}
+function adminPhotoCard(p){
+  const isPending=p.statut==='en_attente';
+  const ch=p.challenge_num||1;
+  const autoPoints=POINTS_BY_ATTEMPT[(p.attempt_num||1)-1]||0;
+  const statusColor=p.statut==='validee'?'var(--success)':p.statut==='refusee'?'var(--danger)':'var(--amber)';
+  const statusLabel=p.statut==='validee'?`✓ Validée · +${p.points||0} pts`:p.statut==='refusee'?'✗ Refusée':'⏳ En attente';
+  return`<div class="admin-photo-card">
+    <img src="${p.data}" onclick="openPhotoViewer('${p.data}')">
+    <div class="admin-photo-footer">
+      <div class="admin-photo-meta">${p.equipe_nom}</div>
+      <div class="admin-photo-sub">Challenge ${ch===1?'Caroline':'Marc'} · Essai n°${p.attempt_num||'?'}/${MAX_ATTEMPTS}</div>
+      ${isPending?`<div class="attempt-info-badge">Essai ${p.attempt_num||'?'} → ${autoPoints} pt${autoPoints>1?'s':''} si validée</div>`:''}
+      <div style="font-size:12px;font-weight:500;color:${statusColor};margin-top:4px">${statusLabel}</div>
+      ${isPending?`<div class="admin-photo-actions">
+        <button class="btn btn-sm btn-danger" onclick="adminValidatePhoto(false,${p.id})">Refuser ✗</button>
+        <button class="btn btn-sm btn-gold" onclick="adminValidatePhoto(true,${p.id})">Valider ✓ (+${autoPoints} pts)</button>
+      </div>`:''}
+    </div>
+  </div>`;
+}
+async function adminValidatePhoto(accepted,photoId){
+  if(!photoId) return;
+  const {data:photo}=await db.from('photos').select('*').eq('id',photoId).single();
+  if(!photo) return;
+  const points=accepted?(POINTS_BY_ATTEMPT[(photo.attempt_num||1)-1]||0):0;
+  await db.from('photos').update({statut:accepted?'validee':'refusee',points}).eq('id',photoId);
+  if(accepted){
+    const ch=photo.challenge_num||1;
+    if(!challengeState[photo.equipe_nom]) challengeState[photo.equipe_nom]={1:{attempts:[],done:false,points:0},2:{attempts:[],done:false,points:0}};
+    challengeState[photo.equipe_nom][ch].done=true;challengeState[photo.equipe_nom][ch].points=points;
+    const total=(challengeState[photo.equipe_nom][1].points||0)+(challengeState[photo.equipe_nom][2].points||0);
+    appData.scores[photo.equipe_nom][1]=total;
+    await db.from('scores').upsert({equipe_nom:photo.equipe_nom,epreuve_id:1,score:total,updated_at:new Date().toISOString()},{onConflict:'equipe_nom,epreuve_id'});
+  }
+  if(accepted) pendingPhotoCount=Math.max(0,pendingPhotoCount-1);
+  updateAdminPhotoBadge();
+  showToast({icon:accepted?'✅':'❌',title:accepted?`Validée — ${points} pts`:'Refusée',type:accepted?'success':'danger',duration:3000});
+  renderAdminPhotos();renderAdminScores();renderLeaderboard('adminLeaderboard');
+}
+
+async function renderAdminPetitBac(){
+  const el=document.getElementById('adminPetitBacContent');
+  el.innerHTML='<div class="loader-text" style="padding:1rem">Chargement...</div>';
+  const {data:reponses}=await db.from('petit_bac_reponses').select('*').order('equipe_nom').order('lettre');
+  if(!reponses||!reponses.length){
+    el.innerHTML='<div class="notice">Aucune réponse enregistrée pour le moment.</div>';
+    return;
+  }
+  // Group by team
+  const byTeam={};
+  reponses.forEach(r=>{
+    if(!byTeam[r.equipe_nom]) byTeam[r.equipe_nom]={};
+    if(!byTeam[r.equipe_nom][r.lettre]) byTeam[r.equipe_nom][r.lettre]=r.ville_donnee;
+  });
+  let html='';
+  Object.entries(byTeam).forEach(([team,lettres])=>{
+    const score=Object.keys(lettres).length;
+    html+=`<div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card-title" style="margin:0">${team}</div>
+        <span class="badge badge-gold">${score} point${score!==1?'s':''}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:4px 12px">
+        ${'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(l=>{
+          const ville=lettres[l];
+          return `<div style="font-size:13px;padding:3px 0;${ville?'':'opacity:.35'}">
+            <span style="font-weight:600;color:var(--gold-dark);min-width:20px;display:inline-block">${l}</span>
+            ${ville?`<span style="color:var(--success)">✓ ${ville}</span>`:`<span style="color:var(--ink-muted)">—</span>`}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  });
+  el.innerHTML=html;
+}
+
+// ===================== ADMIN: ARCHIVE =====================
+async function renderAdminArchive(){
+  const {data:archives}=await db.from('photos_archive').select('*').order('archived_at',{ascending:false});
+  const el=document.getElementById('adminArchiveContent');
+  if(!archives||!archives.length){el.innerHTML='<div class="notice">Aucune archive. Les photos seront archivées lors du prochain reset.</div>';return;}
+  const sessions={};
+  archives.forEach(p=>{const k=p.archive_label||'Session sans nom';if(!sessions[k])sessions[k]=[];sessions[k].push(p);});
+  let html=`<div style="font-size:13px;color:var(--ink-muted);margin-bottom:14px">${archives.length} photo${archives.length>1?'s':''} archivée${archives.length>1?'s':''}</div>`;
+  Object.entries(sessions).forEach(([label,photos])=>{
+    html+=`<div class="archive-session"><div class="archive-session-title">📁 ${label} · ${photos.length} photo${photos.length>1?'s':''}</div>
+      <div class="archive-grid">${photos.map(p=>`<div class="archive-thumb" onclick="openPhotoViewer('${p.data}')"><img src="${p.data}" alt=""><div class="archive-thumb-label">${p.equipe_nom} · Ch.${p.challenge_num||1} · E${p.attempt_num||'?'} · ${p.statut==='validee'?'+'+p.points+'pts':p.statut}</div></div>`).join('')}</div>
+    </div>`;
+  });
+  el.innerHTML=html;
+}
+
+// ===================== LEADERBOARD =====================
+function renderLeaderboard(containerId){
+  const ranked=appData.teams.map(t=>({name:t,total:Object.values(appData.scores[t]||{}).reduce((a,b)=>a+(b||0),0)})).sort((a,b)=>b.total-a.total);
+  const max=Math.max(...ranked.map(r=>r.total),1);
+  const rc=['gold','silver','bronze'];
+  document.getElementById(containerId).innerHTML=ranked.map((r,i)=>`<div class="lb-row"><span class="lb-rank ${rc[i]||''}">${i+1}</span><span class="lb-name">${r.name}</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:${Math.round(r.total/max*100)}%"></div></div><span class="lb-pts">${r.total} pts</span></div>`).join('');
+}
+
+// ===================== RESET =====================
+function openResetModal(){document.getElementById('resetModal').classList.add('open');}
+function closeResetModal(){document.getElementById('resetModal').classList.remove('open');}
+async function confirmReset(){
+  const label=document.getElementById('archiveLabel').value||`Reset du ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`;
+  const {data:photos}=await db.from('photos').select('*');
+  if(photos?.length){
+    await db.from('photos_archive').insert(photos.map(p=>({original_id:p.id,equipe_nom:p.equipe_nom,epreuve_id:p.epreuve_id,challenge_num:p.challenge_num||1,attempt_num:p.attempt_num||1,data:p.data,statut:p.statut,points:p.points||0,created_at:p.created_at,archived_at:new Date().toISOString(),archive_label:label})));
+  }
+  await db.from('scores').delete().neq('id',0);
+  await db.from('photos').delete().neq('id',0);
+  appData.teams.forEach(t=>{appData.epreuves.forEach(e=>{appData.scores[t][e.id]=null;});challengeState[t]={1:{attempts:[],done:false,points:0},2:{attempts:[],done:false,points:0}};});
+  pendingPhotoCount=0;updateAdminPhotoBadge();
+  closeResetModal();document.getElementById('archiveLabel').value='';
+  renderAdminScores();renderAdminPhotos();renderLeaderboard('adminLeaderboard');
+  showToast({icon:'📁',title:`Archivé : "${label}"`,msg:'Scores remis à zéro.',type:'gold',duration:5000});
+}
+
+// ===================== GM: INSTRUCTIONS =====================
+function renderGMInstructions(){
+  const ep=appData.epreuves.find(e=>e.id===currentGMStation);
+  const qs=appData.questions[ep.id]||[];
+  let h=`<div class="card"><div style="margin-bottom:10px"><span style="font-size:17px;font-weight:500;font-family:'Playfair Display',serif;color:var(--gold-dark)">${ep.title}</span></div><div style="font-size:14px;color:var(--ink-soft);line-height:1.7;margin-bottom:10px">${(ep.instructions||'').replace(/\n/g,'<br>')}</div><div class="divider"></div><div style="font-size:12px;color:var(--ink-muted)"><span style="font-weight:500;color:var(--ink)">Scoring :</span> ${ep.scoring||''}</div></div>`;
+  if(ep.type==='photos'){
+    h+=`<div class="card"><div class="card-title">Déroulement</div>
+      <div style="font-size:13px;color:var(--ink-soft);line-height:1.7">
+        <p style="margin-bottom:8px"><strong>Challenge 1</strong> — Rangez les membres de gauche à droite dans l'ordre croissant de première rencontre avec <strong>Caroline</strong>.</p>
+        <p style="margin-bottom:10px"><strong>Challenge 2</strong> — Même principe avec <strong>Marc</strong>. Disponible après le challenge 1.</p>
+        <div style="background:var(--amber-bg);border-radius:var(--radius-sm);padding:8px 12px;font-size:12px;color:var(--amber)">1er essai→10pts · 2e→8pts · 3e→6pts · 4e→4pts · 5e→2pts · Échec→0pt<br>Les deux challenges valent chacun jusqu'à 10 pts (total max 20 pts)</div>
+      </div>
+    </div>`;
+  }
+  if(ep.type==='qcm'&&qs.length){h+=`<div class="card"><div class="card-title">Questions — appuyez pour révéler</div>`;qs.forEach((q,i)=>{const c=q.contenu||{};h+=`<div class="q-item"><div class="q-text">${i+1}. "${c.q||''}"</div><div class="q-opts">${(c.opts||[]).map((o,j)=>`<button class="q-opt" onclick="gmReveal(this,${j===(c.correct||0)})">${o}</button>`).join('')}</div></div>`;});h+=`</div>`;}
+  if(ep.type==='villes'){
+    // No extra block — instructions from DB are shown above, with the notice
+  }  if(ep.type==='frise'&&qs.length){h+=`<div class="card"><div class="card-title">Ordre correct de la frise</div>${qs.map((q,i)=>{const c=q.contenu||{};return`<div class="frise-item"><span class="frise-num">${i+1}</span><span style="flex:1;font-size:13px">${c.evenement||'—'}</span><span style="color:var(--ink-muted);font-size:12px">${c.annee||''}</span></div>`;}).join('')}</div>`;}
+  document.getElementById('gmInstructionsContent').innerHTML=h;
+}
+function gmReveal(btn,isCorrect){btn.parentElement.querySelectorAll('.q-opt').forEach(b=>{b.disabled=true;b.classList.remove('correct','wrong');});btn.classList.add(isCorrect?'correct':'wrong');}
+
+// ===================== GM: SCORES =====================
+function renderGMTeamSel(){
+  const ep=appData.epreuves.find(e=>e.id===currentGMStation);
+  // Build team buttons with lock indicator
+  const teamBtns=appData.teams.map(t=>{
+    const isLocked=!!(appData.locked[t]||{})[currentGMStation];
+    const score=(appData.scores[t]||{})[currentGMStation];
+    const scoreLabel=score!=null?` · ${score} pt${score!==1?'s':''}`:'';
+    return `<button class="team-btn${currentGMTeam===t?' selected':''}" onclick="selectGMTeam(this,'${t}')">
+      ${t}${isLocked?` <span style="font-size:10px">🔒</span>`:''}
+      <div style="font-size:11px;color:var(--ink-muted);margin-top:2px">${isLocked?'Terminé'+scoreLabel:'En attente'}</div>
+    </button>`;
+  }).join('');
+  document.getElementById('gmTeamSel').innerHTML=teamBtns;
+  document.getElementById('gmScoreLbl').textContent=`Score (max ${ep.max_score})`;
+  document.getElementById('gmScoreMax').textContent=`/ ${ep.max_score} pts`;
+}
+
+function selectGMTeam(btn,name){
+  document.querySelectorAll('#gmTeamSel .team-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+  currentGMTeam=name;
+  const isLocked=!!(appData.locked[name]||{})[currentGMStation];
+  const v=(appData.scores[name]||{})[currentGMStation];
+  document.getElementById('gmScoreTitle').textContent=name+(isLocked?' 🔒':'');
+  document.getElementById('gmScoreVal').value=v==null?'':v;
+  document.getElementById('gmScoreVal').disabled=isLocked;
+  document.getElementById('gmScoreForm').style.display='block';
+  // Show/hide lock button and adjustment note
+  const lockBtn=document.getElementById('gmLockBtn');
+  const adjustNote=document.getElementById('gmAdjustNote');
+  const saveBtn=document.getElementById('gmSaveFinalBtn');
+  if(isLocked){
+    if(lockBtn) lockBtn.style.display='none';
+    if(adjustNote) adjustNote.style.display='flex';
+    if(saveBtn) saveBtn.style.display='none';
+  } else {
+    if(lockBtn) lockBtn.style.display='inline-flex';
+    if(adjustNote) adjustNote.style.display='none';
+    if(saveBtn) saveBtn.style.display='inline-flex';
+  }
+}
+
+async function saveGMScore(){
+  if(!currentGMTeam) return;
+  const ep=appData.epreuves.find(e=>e.id===currentGMStation);
+  const v=Math.min(ep.max_score,Math.max(0,parseInt(document.getElementById('gmScoreVal').value)||0));
+  appData.scores[currentGMTeam][currentGMStation]=v;
+  await db.from('scores').upsert({
+    equipe_nom:currentGMTeam,epreuve_id:currentGMStation,
+    score:v,locked:false,updated_at:new Date().toISOString()
+  },{onConflict:'equipe_nom,epreuve_id'});
+  showSaveMsg('gmSaveMsg');
+  renderGMTeamSel();
+}
+
+async function lockGMScore(){
+  if(!currentGMTeam) return;
+  const ep=appData.epreuves.find(e=>e.id===currentGMStation);
+  const v=Math.min(ep.max_score,Math.max(0,parseInt(document.getElementById('gmScoreVal').value)||0));
+  appData.scores[currentGMTeam][currentGMStation]=v;
+  if(!appData.locked[currentGMTeam]) appData.locked[currentGMTeam]={};
+  appData.locked[currentGMTeam][currentGMStation]=true;
+  await db.from('scores').upsert({
+    equipe_nom:currentGMTeam,epreuve_id:currentGMStation,
+    score:v,locked:true,updated_at:new Date().toISOString()
+  },{onConflict:'equipe_nom,epreuve_id'});
+  showToast({icon:'🔒',title:`Score verrouillé — ${v} pts pour ${currentGMTeam}`,type:'success',duration:3000});
+  showSaveMsg('gmSaveMsg');
+  renderGMTeamSel();
+  selectGMTeam(document.querySelector('#gmTeamSel .team-btn.selected'), currentGMTeam);
+}
+
+async function unlockGMScore(){
+  if(!currentGMTeam) return;
+  if(!appData.locked[currentGMTeam]) appData.locked[currentGMTeam]={};
+  appData.locked[currentGMTeam][currentGMStation]=false;
+  await db.from('scores').update({locked:false,updated_at:new Date().toISOString()})
+    .eq('equipe_nom',currentGMTeam).eq('epreuve_id',currentGMStation);
+  document.getElementById('gmScoreVal').disabled=false;
+  showToast({icon:'🔓',title:`Score déverrouillé pour ${currentGMTeam}`,duration:3000});
+  renderGMTeamSel();
+  selectGMTeam(document.querySelector('#gmTeamSel .team-btn.selected'), currentGMTeam);
+}
+
+async function lockPhotoScore(teamName, score){
+  if(!appData.locked[teamName]) appData.locked[teamName]={};
+  appData.locked[teamName][1]=true;
+  appData.scores[teamName][1]=score;
+  await db.from('scores').upsert({
+    equipe_nom:teamName,epreuve_id:1,
+    score,locked:true,updated_at:new Date().toISOString()
+  },{onConflict:'equipe_nom,epreuve_id'});
+  showToast({icon:'🔒',title:`Score verrouillé — ${score} pts pour ${teamName}`,type:'success',duration:3000});
+  renderPhotoChallengeUI(teamName);
+}
+function renderGMPhotoChallengeSelector(){
+  document.getElementById('gmPhotoChallengeContent').innerHTML=`
+    <div class="card"><div class="card-title">Sélectionner une équipe</div>
+    <div class="team-grid" id="photoTeamSel">
+      ${appData.teams.map(t=>`<button class="team-btn" onclick="selectPhotoTeam(this,'${t}')">${t}</button>`).join('')}
+    </div></div>
+    <div id="challengeDetails" style="display:none"></div>`;
+}
+function selectPhotoTeam(btn,name){
+  document.querySelectorAll('#photoTeamSel .team-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');currentPhotoTeam=name;
+  document.getElementById('challengeDetails').style.display='block';
+  renderPhotoChallengeUI(name);
+}
+function renderPhotoChallengeUI(teamName){
+  if(!challengeState[teamName]) challengeState[teamName]={1:{attempts:[],done:false,points:0},2:{attempts:[],done:false,points:0}};
+  const s1=challengeState[teamName][1];
+  const s2=challengeState[teamName][2];
+  const isLocked=!!(appData.locked[teamName]||{})[1];
+  const total=(s1.points||0)+(s2.points||0);
+  document.getElementById('challengeDetails').innerHTML=`
+    ${renderChallengeBlock(1,s1,'Caroline',teamName,false,isLocked)}
+    ${renderChallengeBlock(2,s2,'Marc',teamName,!s1.done,isLocked)}
+    <div class="card" style="text-align:center">
+      <div style="font-size:12px;color:var(--ink-muted);margin-bottom:4px">Score total épreuve 1</div>
+      <div style="font-size:28px;font-weight:500;font-family:'Playfair Display',serif;color:var(--gold-dark)">${total} <span style="font-size:16px;color:var(--ink-muted)">/ 20 pts</span></div>
+      ${isLocked
+        ? `<div style="font-size:12px;color:var(--success);margin-top:8px">🔒 Épreuve verrouillée</div>`
+        : s1.done&&s2.done
+          ? `<div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
+               <button class="btn btn-gold btn-sm" onclick="lockPhotoScore('${teamName}',${total})">✓ Valider et verrouiller (${total} pts)</button>
+             </div>`
+          : ''
+      }
+    </div>`;
+}
+function renderChallengeBlock(chNum,state,person,teamName,locked=false,isEpreuveLocked=false){
+  const used=state.attempts.length;
+  const validatedAttempt=state.attempts.find(a=>a.statut==='validee');
+  const lastAttempt=state.attempts[state.attempts.length-1];
+  const pendingAttempt=state.attempts.find(a=>a.statut==='en_attente');
+  const canSubmit=!state.done&&!pendingAttempt&&used<MAX_ATTEMPTS&&!locked&&!isEpreuveLocked;
+
+  // Build dots — one per slot, accurately reflecting state
+  let dots='';
+  for(let i=0;i<MAX_ATTEMPTS;i++){
+    const att=state.attempts[i]; // may be undefined
+    let cls,label=i+1;
+    if(!att){
+      // No attempt yet for this slot
+      if(i===used&&!state.done&&!locked) cls='attempt-dot current';
+      else cls='attempt-dot inactive';
+    } else {
+      if(att.statut==='validee') cls='attempt-dot success';
+      else if(att.statut==='refusee') cls='attempt-dot used';
+      else cls='attempt-dot current'; // en_attente
+    }
+    dots+=`<div class="${cls}">${label}</div>`;
+  }
+
+  let statusHtml='';
+  if(locked) statusHtml=`<div style="padding:10px 14px;font-size:13px;color:var(--ink-muted)">🔒 Terminez d'abord le challenge Caroline</div>`;
+  else if(pendingAttempt) statusHtml=`<div style="padding:10px 14px;font-size:13px;color:var(--amber)">⏳ Photo en attente de validation par l'administrateur...</div>`;
+  else if(validatedAttempt) statusHtml=`<div style="padding:10px 14px;font-size:13px;color:var(--success)">✓ Réussi à l'essai n°${state.attempts.indexOf(validatedAttempt)+1} — +${validatedAttempt.points||0} pts</div>`;
+  else if(state.done) statusHtml=`<div style="padding:10px 14px;font-size:13px;color:var(--danger)">✗ 5 essais épuisés — 0 point</div>`;
+  else if(lastAttempt?.statut==='refusee') statusHtml=`<div style="padding:10px 14px;font-size:13px;color:var(--danger)">Photo refusée — soumettez l'essai n°${used+1}</div>`;
+
+  let photoHtml='';
+  if(lastAttempt&&lastAttempt.statut!=='en_attente'){
+    const sc=lastAttempt.statut==='validee'?'var(--success)':'var(--danger)';
+    photoHtml=`<div style="padding:0 14px 10px"><img src="${lastAttempt.data}" style="width:100%;aspect-ratio:3/2;object-fit:cover;border-radius:var(--radius-sm);cursor:pointer;margin-bottom:6px" onclick="openPhotoViewer('${lastAttempt.data}')"><div style="font-size:12px;font-weight:500;color:${sc}">${lastAttempt.statut==='validee'?`✓ Validée — +${lastAttempt.points||0} pts`:'✗ Refusée'}</div></div>`;
+  }
+
+  const maxPts=10; // 10pts si réussi au 1er essai
+  const ptsLabel=state.done?(state.points>0?`+${state.points} pts`:'0 pt'):`max ${maxPts} pts`;
+  const ptsCls=state.done?(state.points>0?'done':'failed'):'';
+
+  return`<div class="challenge-block">
+    <div class="challenge-header">
+      <div><div class="challenge-title">Challenge ${chNum} — ${person}</div><div class="challenge-subtitle">Ordre croissant de rencontre · ${MAX_ATTEMPTS} essais max</div></div>
+      <div class="challenge-pts-badge ${ptsCls}">${ptsLabel}</div>
+    </div>
+    <div class="attempts-row">${dots}<span class="attempt-label">${used}/${MAX_ATTEMPTS}</span></div>
+    ${statusHtml}${photoHtml}
+    ${canSubmit?`<div class="photo-submit-area"><label for="fileChallenge${chNum}"><div class="photo-zone"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--ink-muted)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg><div class="photo-zone-text">Soumettre l'essai n°${used+1}</div></div></label></div>`:''}
+  </div>`;
+}
+
+async function handleChallengePhoto(e,chNum){
+  const file=e.target.files[0];if(!file||!currentPhotoTeam) return;
+  if(!challengeState[currentPhotoTeam]) challengeState[currentPhotoTeam]={1:{attempts:[],done:false,points:0},2:{attempts:[],done:false,points:0}};
+  const st=challengeState[currentPhotoTeam][chNum];
+  const attemptNum=st.attempts.length+1;
+  if(attemptNum>MAX_ATTEMPTS||st.done) return;
+  const reader=new FileReader();
+  reader.onload=async ev=>{
+    const {data:inserted}=await db.from('photos').insert({
+      equipe_nom:currentPhotoTeam,epreuve_id:currentGMStation,
+      data:ev.target.result,statut:'en_attente',points:0,
+      challenge_num:chNum,attempt_num:attemptNum
+    }).select().single();
+    if(inserted){
+      // Reload challenge state to keep dots in sync
+      await loadChallengeState();
+      showToast({icon:'📤',title:`Essai n°${attemptNum} envoyé`,msg:'En attente de validation...',duration:4000});
+      renderPhotoChallengeUI(currentPhotoTeam);
+    }
+  };
+  reader.readAsDataURL(file);e.target.value='';
+}
+
+// ===================== PETIT BAC DES VILLES =====================
+const PB_DURATION = 10;
+const PB_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
+let pb = {
+  team: null,
+  idx: 0,           // index into pb.letters (not PB_ALPHABET)
+  letters: [],       // only letters that have at least one ville configured
+  timeLeft: PB_DURATION,
+  maxTime: PB_DURATION,
+  running: false,
+  finished: false,
+  scored: {},
+  scoredThisLetter: false,
+  currentVilles: [],
+  timer: null
+};
+
+function pbGetActiveLetters(){
+  // Only keep letters that have at least one ville in the DB
+  return PB_ALPHABET.filter(l => (appData.villesBac[l]||[]).length > 0);
+}
+function pbCurrentLetter(){ return pb.letters[pb.idx] || ''; }
+function pbCurrentVilles(){ return appData.villesBac[pbCurrentLetter()] || []; }
+function pbTotalScore(){ return Object.values(pb.scored).filter(v=>v===true).length; }
+
+function renderPetitBacGameScreen(){
+  const el = document.getElementById('gmPetitBacContent');
+  if(!el) return;
+
+  const teamBtns = appData.teams.map(t=>
+    `<button class="team-btn${pb.team===t?' selected':''}" onclick="pbSelectTeam('${t}')">${t}</button>`
+  ).join('');
+
+  let body = '';
+
+  if(!pb.team){
+    // No team selected yet — show selector and instructions
+    body = `
+      <div class="card">
+        <div class="card-title">Sélectionner l'équipe qui joue</div>
+        <div class="team-grid">${teamBtns}</div>
+      </div>
+      <div class="notice">Sélectionnez une équipe pour afficher le jeu.</div>`;
+  } else if(pb.finished){
+    // Game over screen
+    const total = pbTotalScore();
+    const grid = pb.letters.map(l=>{
+      const v=pb.scored[l];
+      const bg=v===true?'var(--success-bg)':v===false?'var(--danger-bg)':'var(--border)';
+      const col=v===true?'var(--success)':v===false?'var(--danger)':'var(--ink-muted)';
+      return `<div style="width:30px;height:30px;border-radius:6px;background:${bg};color:${col};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500">${l}</div>`;
+    }).join('');
+    body = `
+      <div class="card">
+        <div class="card-title" style="margin-bottom:6px">Changer d'équipe</div>
+        <div class="team-grid">${teamBtns}</div>
+      </div>
+      <div class="card" style="text-align:center">
+        <div style="font-size:13px;color:var(--ink-muted);margin-bottom:8px">Partie terminée — <strong>${pb.team}</strong></div>
+        <div style="font-size:72px;font-weight:400;font-family:'Playfair Display',serif;color:var(--gold-dark);line-height:1">${total}</div>
+        <div style="font-size:15px;color:var(--ink-muted);margin:6px 0 16px">point${total!==1?'s':''} sur ${pb.letters.length}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;justify-content:center;margin-bottom:20px">${grid}</div>
+        <button class="btn btn-gold btn-full" onclick="pbSaveScore()">💾 Enregistrer le score (${total} pts)</button>
+        <span class="save-msg" id="pbSaveMsg" style="display:block;margin-top:8px;text-align:center">Score enregistré ✓</span>
+      </div>`;
+  } else {
+    // Game in progress
+    const lettre = pbCurrentLetter();
+    const villes = pbCurrentVilles();
+    const idx = pb.idx;
+    const total = pb.letters.length;
+    const currentScore = pbTotalScore();
+
+    // Timer SVG circle — use maxTime as reference so carry-over displays correctly
+    const R = 32, cx = 38, cy = 38;
+    const circ = +(2*Math.PI*R).toFixed(2);
+    const max = pb.maxTime||PB_DURATION;
+    const offset = +(circ*(1 - Math.min(pb.timeLeft,max)/max)).toFixed(2);
+    const tColor = pb.timeLeft<=3?'var(--danger)':pb.timeLeft<=6?'var(--amber)':'var(--success)';
+
+    // Dots row — only active letters
+    const dots = pb.letters.map((l,i)=>{
+      let bg,col;
+      if(i<idx){ bg=pb.scored[l]?'var(--success)':'var(--danger)'; col='white'; }
+      else if(i===idx){ bg='var(--gold)'; col='white'; }
+      else { bg='var(--border)'; col='var(--ink-muted)'; }
+      return `<div style="width:22px;height:22px;border-radius:50%;background:${bg};color:${col};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0">${l}</div>`;
+    }).join('');
+
+    // Ville buttons — simple inline onclick, safe because we no longer re-render every second
+    const villeBtns = villes.length
+      ? villes.map((v,i)=>`<button
+          id="pb-ville-${i}"
+          class="ville-answer-btn"
+          onclick="pbMarkVille(${i})"
+          style="padding:12px 18px;border-radius:var(--radius);border:2px solid var(--border);
+          background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;
+          font-size:15px;font-weight:500;cursor:pointer;transition:all .15s;
+          -webkit-tap-highlight-color:transparent;min-width:120px;text-align:center">
+          ${v}
+        </button>`).join('')
+      : `<div style="font-size:13px;color:var(--ink-muted);font-style:italic;padding:8px 0">Aucune ville configurée pour <strong>${lettre}</strong></div>`;
+
+    body = `
+      <div class="card">
+        <div class="card-title" style="margin-bottom:6px">Équipe : <span style="color:var(--gold-dark)">${pb.team}</span></div>
+        <div class="team-grid">${teamBtns}</div>
+      </div>
+
+      <div style="background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+        <!-- Progress bar -->
+        <div style="height:4px;background:var(--border)">
+          <div style="height:4px;background:var(--gold);width:${Math.round(idx/total*100)}%;transition:width .3s"></div>
+        </div>
+
+        <!-- Timer + Letter + Score -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 16px 0">
+          <!-- Timer -->
+          <div style="position:relative;width:76px;height:76px;flex-shrink:0">
+            <svg width="76" height="76" style="transform:rotate(-90deg)" viewBox="0 0 76 76">
+              <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="var(--border)" stroke-width="6"/>
+              <circle id="pb-timer-circle" cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${tColor}" stroke-width="6"
+                stroke-dasharray="${circ}" stroke-dashoffset="${offset}"
+                style="transition:stroke-dashoffset .95s linear,stroke .3s"/>
+            </svg>
+            <div id="pb-timer-num" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+              font-size:28px;font-weight:500;color:${tColor};font-family:'Playfair Display',serif">${pb.timeLeft}</div>
+          </div>
+
+          <!-- Big Letter -->
+          <div style="text-align:center;flex:1">
+            <div id="pb-big-letter" style="font-size:96px;line-height:1;font-weight:400;font-family:'Playfair Display',serif;
+              color:${pb.scoredThisLetter?'var(--success)':'var(--gold-dark)'};transition:color .25s">
+              ${lettre}
+            </div>
+            <div id="pb-scored-msg" style="font-size:13px;color:var(--success);font-weight:500;margin-top:2px;${pb.scoredThisLetter?'':'display:none'}">✓ Point marqué !</div>
+            <div id="pb-waiting-msg" style="font-size:12px;color:var(--ink-muted);${pb.scoredThisLetter?'display:none':''}">Lettre ${idx+1} / ${total}</div>
+          </div>
+
+          <!-- Score -->
+          <div style="text-align:center;min-width:56px;flex-shrink:0">
+            <div id="pb-score-val" style="font-size:36px;font-weight:400;font-family:'Playfair Display',serif;color:var(--gold-dark);line-height:1">${currentScore}</div>
+            <div style="font-size:11px;color:var(--ink-muted);margin-top:2px">point${currentScore!==1?'s':''}</div>
+          </div>
+        </div>
+
+        <!-- Villes -->
+        <div style="padding:14px 14px 8px">
+          <div style="font-size:11px;color:var(--ink-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">
+            Villes commençant par ${lettre}
+          </div>
+          <div id="pb-villes" style="display:flex;flex-wrap:wrap;gap:8px">${villeBtns}</div>
+        </div>
+
+        <!-- Controls -->
+        <div style="padding:12px 14px 14px;display:flex;gap:8px;border-top:1px solid var(--border)">
+          ${!pb.running
+            ? `<button class="btn btn-gold" style="flex:1" onclick="pbStart()">▶ ${idx===0?'Démarrer le jeu':'Reprendre'}</button>`
+            : `<button class="btn" style="flex:1;border-color:var(--border-strong)" onclick="pbPause()">⏸ Pause</button>`
+          }
+          <button class="btn" style="border-color:var(--border-strong)" onclick="pbSkip()">Passer →</button>
+        </div>
+      </div>
+
+      <!-- Alphabet dots -->
+      <div style="display:flex;flex-wrap:wrap;gap:3px;padding:8px 0 4px">${dots}</div>`;
+  }
+
+  el.innerHTML = body;
+  // Store current villes for pbMarkVille (only valid during game)
+  if(!pb.finished && pb.team && pb.idx < 26){
+    pb.currentVilles = [...pbCurrentVilles()];
+  }
+}
+
+function pbSelectTeam(name){
+  const isLocked=!!(appData.locked[name]||{})[currentGMStation];
+  if(isLocked){
+    showToast({icon:'🔒',title:`${name} a déjà joué cette épreuve`,msg:`Score verrouillé : ${(appData.scores[name]||{})[currentGMStation]??0} pts`,duration:4000});
+    return;
+  }
+  if(pb.timer){ clearTimeout(pb.timer); pb.timer=null; }
+  pb.team=name;
+  pb.letters=pbGetActiveLetters();
+  pb.idx=0; pb.timeLeft=PB_DURATION; pb.maxTime=PB_DURATION;
+  pb.running=false; pb.finished=false;
+  pb.scored={}; pb.scoredThisLetter=false; pb.currentVilles=[];
+  renderPetitBacGameScreen();
+}
+
+function pbStart(){
+  if(pb.running||pb.finished) return;
+  pb.running=true;
+  pb.maxTime=pb.timeLeft; // reference for SVG circle calculation
+  renderPetitBacGameScreen();
+  pbTick();
+}
+
+function pbTick(){
+  if(pb.timer){ clearTimeout(pb.timer); pb.timer=null; }
+  if(!pb.running||pb.finished) return;
+  pb.timer=setTimeout(()=>{
+    if(!pb.running) return;
+    pb.timeLeft--;
+    if(pb.timeLeft<=0){
+      pbAdvanceLetter(0);
+    } else {
+      pbUpdateTimerDOM();
+      pbTick();
+    }
+  },1000);
+}
+
+function pbUpdateTimerDOM(){
+  const R=32, circ=+(2*Math.PI*R).toFixed(2);
+  const max=pb.maxTime||PB_DURATION;
+  const ratio=Math.max(0, pb.timeLeft/max);
+  const offset=+(circ*(1-ratio)).toFixed(2);
+  const tColor=pb.timeLeft<=3?'var(--danger)':pb.timeLeft<=6?'var(--amber)':'var(--success)';
+  const circle=document.getElementById('pb-timer-circle');
+  const num=document.getElementById('pb-timer-num');
+  if(circle){ circle.setAttribute('stroke-dashoffset',offset); circle.setAttribute('stroke',tColor); }
+  if(num){ num.textContent=pb.timeLeft; num.style.color=tColor; }
+}
+
+function pbPause(){
+  pb.running=false;
+  if(pb.timer){ clearTimeout(pb.timer); pb.timer=null; }
+  renderPetitBacGameScreen();
+}
+
+function pbSkip(){
+  if(pb.timer){ clearTimeout(pb.timer); pb.timer=null; }
+  const carryOver=pb.timeLeft; // carry remaining seconds to next letter
+  pbAdvanceLetter(carryOver);
+}
+
+function pbAdvanceLetter(carryOver){
+  if(pb.timer){ clearTimeout(pb.timer); pb.timer=null; }
+  const l=pb.letters[pb.idx];
+  if(pb.scored[l]===undefined) pb.scored[l]=false;
+  pb.idx++;
+  if(pb.idx>=pb.letters.length){
+    pb.running=false; pb.finished=true;
+    renderPetitBacGameScreen();
+    return;
+  }
+  pb.timeLeft=PB_DURATION+(carryOver||0);
+  pb.maxTime=pb.timeLeft;
+  pb.scoredThisLetter=false;
+  renderPetitBacGameScreen();
+  if(pb.running) pbTick();
+}
+function pbMarkVille(idx){
+  if(pb.scoredThisLetter||!pb.running) return;
+  const ville = (pb.currentVilles||[])[idx] || '(ville '+(idx+1)+')';
+  const carryOver = pb.timeLeft;
+  // Stop current timer
+  if(pb.timer){ clearTimeout(pb.timer); pb.timer=null; }
+  // Update state
+  pb.scoredThisLetter = true;
+  pb.scored[pb.letters[pb.idx]] = true;
+  // Style clicked button green immediately
+  const btn = document.getElementById('pb-ville-'+idx);
+  if(btn){
+    btn.style.background='var(--success-bg)';
+    btn.style.borderColor='var(--success)';
+    btn.style.color='var(--success)';
+    btn.style.fontWeight='600';
+    btn.disabled=true;
+  }
+  // Dim all other buttons
+  (pb.currentVilles||[]).forEach((_,i)=>{
+    if(i!==idx){
+      const b=document.getElementById('pb-ville-'+i);
+      if(b){ b.style.opacity='.4'; b.style.cursor='default'; b.disabled=true; }
+    }
+  });
+  // Save to DB (fire and forget)
+  db.from('petit_bac_reponses').insert({
+    equipe_nom:pb.team, lettre:pb.letters[pb.idx],
+    ville_donnee:ville, points:1
+  }).then(()=>{}).catch(()=>{});
+  // Advance immediately to next letter, carrying over remaining time
+  pbAdvanceLetter(carryOver);
+}
+function renderPetitBacScoreFin(){
+  const el=document.getElementById('gmScoreFinContent');
+  if(!el) return;
+  if(!pb.team||!pb.finished){
+    el.innerHTML='<div class="notice">Terminez la partie dans l\'onglet 🏙 Jeu pour voir le score final ici.</div>';
+    return;
+  }
+  const total=pbTotalScore();
+  const grid=pb.letters.map(l=>{
+    const v=pb.scored[l];
+    const bg=v===true?'var(--success-bg)':v===false?'var(--danger-bg)':'var(--border)';
+    const col=v===true?'var(--success)':v===false?'var(--danger)':'var(--ink-muted)';
+    return`<div style="width:32px;height:32px;border-radius:6px;background:${bg};color:${col};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500">${l}</div>`;
+  }).join('');
+  el.innerHTML=`
+    <div class="card" style="text-align:center">
+      <div style="font-size:13px;color:var(--ink-muted);margin-bottom:8px">Score final — <strong>${pb.team}</strong></div>
+      <div style="font-size:72px;font-weight:400;font-family:'Playfair Display',serif;color:var(--gold-dark);line-height:1">${total}</div>
+      <div style="font-size:15px;color:var(--ink-muted);margin:6px 0 16px">point${total!==1?'s':''} sur ${pb.letters.length}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;justify-content:center;margin-bottom:20px">${grid}</div>
+      <button class="btn btn-gold btn-full" onclick="pbSaveScore()">💾 Enregistrer (${total} pts)</button>
+      <span class="save-msg" id="pbSaveMsg2" style="display:block;margin-top:8px;text-align:center">Score enregistré ✓</span>
+    </div>`;
+}
+async function pbSaveScore(){
+  if(!pb.team) return;
+  const score=pbTotalScore();
+  appData.scores[pb.team][currentGMStation]=score;
+  if(!appData.locked[pb.team]) appData.locked[pb.team]={};
+  appData.locked[pb.team][currentGMStation]=true;
+  await db.from('scores').upsert({
+    equipe_nom:pb.team,epreuve_id:currentGMStation,
+    score,locked:true,updated_at:new Date().toISOString()
+  },{onConflict:'equipe_nom,epreuve_id'});
+  showSaveMsg('pbSaveMsg'); showSaveMsg('pbSaveMsg2');
+  showToast({icon:'🏙',title:`${score} pts verrouillés pour ${pb.team}`,type:'success',duration:3000});
+}
+// ===================== RICH TEXT EDITOR =====================
+function rteCmd(cmd){
+  document.execCommand(cmd, false, null);
+  document.getElementById('epInstr')?.focus();
+}
+function rteColor(color){
+  if(color){
+    document.execCommand('styleWithCSS', false, true);
+    document.execCommand('foreColor', false, color);
+  } else {
+    document.execCommand('styleWithCSS', false, true);
+    document.execCommand('removeFormat', false, null);
+  }
+  document.getElementById('epInstr')?.focus();
+}
+function syncInstrToHidden(){
+  const el=document.getElementById('epInstr');
+  const hidden=document.getElementById('epInstrHidden');
+  if(el&&hidden) hidden.value=el.innerHTML;
+}
+// ===================== UTILS =====================
+function openPhotoViewer(src){document.getElementById('photoViewerImg').src=src;document.getElementById('photoViewer').classList.add('open');}
+function closePhotoViewer(){document.getElementById('photoViewer').classList.remove('open');}
+function showSaveMsg(id){const el=document.getElementById(id);if(!el)return;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2000);}
+init();
+</script>
+</body>
+</html>
