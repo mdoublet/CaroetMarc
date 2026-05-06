@@ -1161,7 +1161,14 @@ function renderAnecdotesGame(){
   const el=document.getElementById('gmAnecdotesContent');
   if(!el) return;
 
-  const teamBtns=appData.teams.map(t=>`<button class="team-btn${anec.team===t?' selected':''}" onclick="anecSelectTeam('${t}')">${t}</button>`).join('');
+  const teamBtns=appData.teams.map(t=>{
+    const isLocked=!!(appData.locked[t]||{})[currentGMStation];
+    const score=(appData.scores[t]||{})[currentGMStation];
+    return`<button class="team-btn${anec.team===t?' selected':''}" onclick="anecSelectTeam('${t}')">
+      ${t}${isLocked?' 🔒':''}
+      <div style="font-size:11px;color:var(--ink-muted);margin-top:2px">${isLocked?`Terminé · ${score??0} pt${score!==1?'s':''}`:'En attente'}</div>
+    </button>`;
+  }).join('');
 
   if(!anec.team){
     el.innerHTML=`<div class="card"><div class="card-title">Sélectionner l'équipe qui joue</div><div class="team-grid">${teamBtns}</div></div>
@@ -1273,7 +1280,7 @@ function renderAnecdotesGame(){
 function anecSelectTeam(name){
   const isLocked=!!(appData.locked[name]||{})[currentGMStation];
   if(isLocked){
-    showToast({icon:'🔒',title:`${name} a déjà joué cette épreuve`,msg:`Score verrouillé : ${(appData.scores[name]||{})[currentGMStation]??0} pts`,duration:4000});
+    showToast({icon:'🔒',title:`${name} a déjà joué`,msg:`Score verrouillé : ${(appData.scores[name]||{})[currentGMStation]??0} pts`,duration:4000});
     return;
   }
   anec.team=name; anec.idx=0; anec.score=0; anec.answered=[]; anec.finished=false;
@@ -1286,13 +1293,27 @@ function anecAnswer(chosen){
   const correct=chosen===a.reponse;
   if(correct) anec.score++;
   anec.answered.push({idx:anec.idx,correct,chosen});
-  renderAnecdotesGame();
+  // Auto-advance after a short delay so the GM sees the result
+  // If last question, mark finished and auto-save
+  if(anec.idx>=appData.anecdotes.length-1){
+    anec.finished=true;
+    renderAnecdotesGame();
+    // Auto-lock immediately
+    anecSaveScore();
+  } else {
+    renderAnecdotesGame();
+  }
 }
 
 function anecNext(){
   anec.idx++;
-  if(anec.idx>=appData.anecdotes.length) anec.finished=true;
-  renderAnecdotesGame();
+  if(anec.idx>=appData.anecdotes.length){
+    anec.finished=true;
+    renderAnecdotesGame();
+    anecSaveScore();
+  } else {
+    renderAnecdotesGame();
+  }
 }
 
 function anecPrev(){
