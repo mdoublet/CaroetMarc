@@ -330,12 +330,14 @@ input[type=file]{display:none}
   <div class="nav-tabs" id="gmNavTabs">
     <button class="nav-tab" id="gmPhotoTab" onclick="gmTab('photos',this)" style="display:none">📸 Photos <span class="notif-badge" id="gmPhotoBadge">0</span></button>
     <button class="nav-tab" id="gmPetitBacTab" onclick="gmTab('petitbac',this)" style="display:none">🏙 Jeu</button>
+    <button class="nav-tab" id="gmAnecdotesTab" onclick="gmTab('anecdotes',this)" style="display:none">🎭 Jeu</button>
     <button class="nav-tab active" id="gmInstrTab" onclick="gmTab('instructions',this)">Instructions</button>
     <button class="nav-tab" id="gmScoreTab" onclick="gmTab('saisie',this)">Scores</button>
     <button class="nav-tab" id="gmScoreFinTab" onclick="gmTab('scorefin',this)" style="display:none">🏆 Score final</button>
     <button class="nav-tab" onclick="gmTab('lb',this)">Classement</button>
   </div>
   <div id="gPhotos" class="page"><div id="gmPhotoChallengeContent"></div></div>
+  <div id="gAnecdotes" class="page"><div id="gmAnecdotesContent"></div></div>
   <div id="gInstructions" class="page active"><div id="gmInstructionsContent"></div></div>
   <div id="gPetitBac" class="page"><div id="gmPetitBacContent"></div></div>
   <div id="gScoreFin" class="page"><div id="gmScoreFinContent"></div></div>
@@ -435,7 +437,7 @@ const SESSION_KEY='mc_wedding_session_v2';
 let currentRole=null,currentGMStation=null,currentGMTeam=null,currentPhotoTeam=null;
 let currentEpTab=1,pendingPhotoCount=0,gmRefusedCount=0;
 let challengeState={};
-let appData={teams:[],epreuves:[],scores:{},questions:{},joueurs:[],villesBac:{}};
+let appData={teams:[],epreuves:[],scores:{},questions:{},joueurs:[],villesBac:{},anecdotes:[]};
 let pins={admin:'1234',gm:{1:'5678',2:'5679',3:'5680',4:'5681'}};
 
 // ===================== SESSION =====================
@@ -459,18 +461,20 @@ async function safeLoad(query){
 
 async function init(){
   try{
-    const [epreuves,equipes,scores,questions,configRows,joueurs,villesBac]=await Promise.all([
+    const [epreuves,equipes,scores,questions,configRows,joueurs,villesBac,anecdotes]=await Promise.all([
       safeLoad(db.from('epreuves').select('*').order('id')),
       safeLoad(db.from('equipes').select('*').order('id')),
       safeLoad(db.from('scores').select('*')),
       safeLoad(db.from('questions').select('*').order('ordre')),
       safeLoad(db.from('config').select('*')),
       safeLoad(db.from('joueurs').select('*').order('nom')),
-      safeLoad(db.from('villes_bac').select('*').order('lettre').order('ville'))
+      safeLoad(db.from('villes_bac').select('*').order('lettre').order('ville')),
+      safeLoad(db.from('anecdotes').select('*').order('ordre').order('id'))
     ]);
     appData.epreuves=epreuves;
     appData.teams=equipes.map(e=>e.nom);
     appData.joueurs=joueurs;
+    appData.anecdotes=anecdotes;
     appData.villesBac={};
     villesBac.forEach(row=>{
       const l=(row.lettre||'').toUpperCase();
@@ -717,6 +721,16 @@ function setupGMInterface(){
     document.querySelectorAll('#gmApp .page').forEach(p=>p.classList.remove('active'));
     document.getElementById('gPetitBac').classList.add('active');
     renderPetitBacGameScreen();
+  } else if(ep.type==='qcm'){
+    const anecdotesTab=document.getElementById('gmAnecdotesTab');
+    if(anecdotesTab){
+      anecdotesTab.style.display='inline-flex';
+      document.querySelectorAll('#gmNavTabs .nav-tab').forEach(b=>b.classList.remove('active'));
+      anecdotesTab.classList.add('active');
+      document.querySelectorAll('#gmApp .page').forEach(p=>p.classList.remove('active'));
+      document.getElementById('gAnecdotes').classList.add('active');
+      renderAnecdotesGame();
+    }
   } else {
     scoreTab.style.display='inline-flex';
   }
@@ -753,12 +767,13 @@ function adminTab(name,btn){
 function gmTab(name,btn){
   document.querySelectorAll('#gmApp .page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('#gmNavTabs .nav-tab').forEach(b=>b.classList.remove('active'));
-  const map={photos:'gPhotos',instructions:'gInstructions',petitbac:'gPetitBac',saisie:'gSaisie',scorefin:'gScoreFin',lb:'gLb'};
+  const map={photos:'gPhotos',anecdotes:'gAnecdotes',instructions:'gInstructions',petitbac:'gPetitBac',saisie:'gSaisie',scorefin:'gScoreFin',lb:'gLb'};
   document.getElementById(map[name]).classList.add('active');btn.classList.add('active');
   if(name==='lb') renderLeaderboard('gmLeaderboard');
   if(name==='photos'){gmRefusedCount=0;updateGMPhotoBadge(0);}
   if(name==='petitbac') renderPetitBacGameScreen();
   if(name==='scorefin') renderPetitBacScoreFin();
+  if(name==='anecdotes') renderAnecdotesGame();
 }
 
 // ===================== PIN CONFIG =====================
@@ -899,9 +914,13 @@ function renderEpEditor(){
     h+=`<div class="divider"></div><div class="notice">Épreuve photo automatique.<br>Challenge 1 (Caroline) + Challenge 2 (Marc)<br>1er essai = 10 pts · 2e = 8 pts · 3e = 6 pts · 4e = 4 pts · 5e = 2 pts · Aucun bon = 0 pt<br>Score total : 20 pts max</div>`;
   }
   if(ep.type==='qcm'){
-    h+=`<div class="divider"></div><div style="font-size:14px;font-weight:500;margin-bottom:10px">Questions</div>`;
-    qs.forEach((q,i)=>{const c=q.contenu||{};h+=`<div class="q-editor"><div class="field-label">Question ${i+1}</div><input type="text" class="admin-input" value="${c.q||''}" onchange="updateQLocal(${i},'q',this.value)" style="margin-bottom:8px"><div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${(c.opts||['Marc','Caroline','Les deux']).map((o,j)=>`<div style="display:flex;gap:6px;align-items:center"><input type="radio" name="correct${i}" value="${j}" ${j===(c.correct||0)?'checked':''} onchange="updateQLocal(${i},'correct',${j})" style="width:auto;accent-color:var(--gold)"><input type="text" value="${o}" onchange="updateQOptLocal(${i},${j},this.value)" style="flex:1;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px"></div>`).join('')}</div><button class="btn btn-sm btn-danger" onclick="removeQLocal(${i})">Supprimer</button></div>`;});
-    h+=`<button class="btn btn-sm" onclick="addQLocal()">+ Ajouter une question</button>`;
+    h+=`<div class="divider"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:14px;font-weight:500">Anecdotes</div>
+      <button class="btn btn-sm" onclick="addAnecdote()">+ Ajouter</button>
+    </div>
+    <div class="notice" style="font-size:12px">Chaque anecdote vaut 1 point. La réponse doit être "Lui", "Elle" ou "Les 2".</div>
+    <div id="anecdotesEditor">${renderAnecdotesEditor()}</div>`;
   }
   if(ep.type==='villes'){
     h+=`<div class="divider"></div>
@@ -918,7 +937,7 @@ function renderEpEditor(){
     h+=`<button class="btn btn-sm" onclick="addFriseLocal()">+ Ajouter une étape</button>`;
   }
   h+=`<div class="divider"></div><div style="display:flex;align-items:center;gap:10px">
-    <button class="btn btn-gold" onclick="${ep.type==='villes'?'saveVillesBacAndEpreuve()':'saveEpreuve()'}">Enregistrer</button>
+    <button class="btn btn-gold" onclick="${ep.type==='villes'?'saveVillesBacAndEpreuve()':ep.type==='qcm'?'saveAnecdotesAndEpreuve()':'saveEpreuve()'}">Enregistrer</button>
     <span class="save-msg" id="epSaveMsg">Sauvegardé ✓</span>
   </div></div>`;
   document.getElementById('adminEpEditor').innerHTML=h;
@@ -1129,7 +1148,214 @@ async function renderAdminPetitBac(){
   el.innerHTML=html;
 }
 
-// ===================== ADMIN: ARCHIVE =====================
+// ===================== ANECDOTES GAME ("CELUI QUI...") =====================
+let anec = {
+  team: null,
+  idx: 0,
+  score: 0,
+  answered: [], // {idx, correct, chosen}
+  finished: false
+};
+
+function renderAnecdotesGame(){
+  const el=document.getElementById('gmAnecdotesContent');
+  if(!el) return;
+
+  const teamBtns=appData.teams.map(t=>`<button class="team-btn${anec.team===t?' selected':''}" onclick="anecSelectTeam('${t}')">${t}</button>`).join('');
+
+  if(!anec.team){
+    el.innerHTML=`<div class="card"><div class="card-title">Sélectionner l'équipe qui joue</div><div class="team-grid">${teamBtns}</div></div>
+    <div class="notice">Sélectionnez une équipe pour commencer les anecdotes.</div>`;
+    return;
+  }
+
+  const total=appData.anecdotes.length;
+
+  if(anec.finished || anec.idx>=total){
+    // Game over
+    const grid=appData.anecdotes.map((a,i)=>{
+      const ans=anec.answered.find(x=>x.idx===i);
+      const ok=ans?.correct;
+      return`<div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:flex-start">
+        <div style="width:20px;height:20px;border-radius:50%;background:${ok?'var(--success-bg)':'var(--danger-bg)'};color:${ok?'var(--success)':'var(--danger)'};display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;margin-top:2px">${ok?'✓':'✗'}</div>
+        <div style="flex:1">
+          <div style="font-size:13px;color:var(--ink)">Celui qui… <strong>${a.celui_qui}</strong></div>
+          <div style="font-size:12px;color:var(--ink-muted)">Réponse : ${a.reponse}${ans&&!ok?' · Choix : '+ans.chosen:''}</div>
+        </div>
+      </div>`;
+    }).join('');
+    el.innerHTML=`
+      <div class="card"><div class="card-title" style="margin-bottom:6px">Changer d'équipe</div><div class="team-grid">${teamBtns}</div></div>
+      <div class="card" style="text-align:center">
+        <div style="font-size:13px;color:var(--ink-muted);margin-bottom:8px">Partie terminée — <strong>${anec.team}</strong></div>
+        <div style="font-size:64px;font-weight:400;font-family:'Playfair Display',serif;color:var(--gold-dark);line-height:1">${anec.score}</div>
+        <div style="font-size:15px;color:var(--ink-muted);margin:6px 0 16px">point${anec.score!==1?'s':''} sur ${total}</div>
+        <button class="btn btn-gold btn-full" onclick="anecSaveScore()">💾 Enregistrer (${anec.score} pts)</button>
+        <span class="save-msg" id="anecSaveMsg" style="display:block;margin-top:8px;text-align:center">Score enregistré ✓</span>
+      </div>
+      <div class="card"><div class="card-title">Récapitulatif</div>${grid}</div>`;
+    return;
+  }
+
+  const a=appData.anecdotes[anec.idx];
+  const prevAns=anec.answered.find(x=>x.idx===anec.idx);
+  const alreadyAnswered=!!prevAns;
+  const progress=Math.round(anec.idx/total*100);
+
+  const choiceBtn=(label)=>{
+    let bg='var(--warm-white)', border='var(--border)', col='var(--ink)', extra='';
+    if(alreadyAnswered){
+      const isCorrect=label===a.reponse;
+      const isChosen=label===prevAns.chosen;
+      if(isCorrect){ bg='var(--success-bg)'; border='var(--success)'; col='var(--success)'; extra='font-weight:600'; }
+      else if(isChosen){ bg='var(--danger-bg)'; border='var(--danger)'; col='var(--danger)'; extra='font-weight:600'; }
+      else { bg='#F5F3EE'; col='var(--ink-muted)'; }
+    }
+    return `<button onclick="${alreadyAnswered?'':'anecAnswer(\''+label+'\')'}"
+      style="flex:1;padding:14px 8px;border-radius:var(--radius);border:2px solid ${border};
+      background:${bg};color:${col};font-family:'DM Sans',sans-serif;font-size:15px;
+      ${extra};cursor:${alreadyAnswered?'default':'pointer'};transition:all .15s;text-align:center">
+      ${label}
+    </button>`;
+  };
+
+  el.innerHTML=`
+    <div class="card"><div class="card-title" style="margin-bottom:6px">Équipe : <span style="color:var(--gold-dark)">${anec.team}</span></div><div class="team-grid">${teamBtns}</div></div>
+
+    <div style="background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+      <!-- Progress -->
+      <div style="height:4px;background:var(--border)"><div style="height:4px;background:var(--gold);width:${progress}%;transition:width .3s"></div></div>
+
+      <!-- Header -->
+      <div style="padding:12px 16px 6px;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:12px;color:var(--ink-muted)">Question ${anec.idx+1} / ${total}</div>
+        <div style="font-size:13px;font-weight:500;color:var(--gold-dark)">${anec.score} pt${anec.score!==1?'s':''}</div>
+      </div>
+
+      <!-- Question -->
+      <div style="padding:16px 16px 8px;text-align:center">
+        <div style="font-size:13px;color:var(--ink-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Celui qui…</div>
+        <div style="font-size:22px;font-weight:500;font-family:'Playfair Display',serif;color:var(--ink);line-height:1.3">${a.celui_qui}</div>
+      </div>
+
+      <!-- Choices -->
+      <div style="padding:12px 14px;display:flex;gap:8px">
+        ${choiceBtn('Lui')}${choiceBtn('Elle')}${choiceBtn('Les 2')}
+      </div>
+
+      <!-- Comment (shown after wrong answer) -->
+      ${alreadyAnswered&&!prevAns.correct&&a.commentaire?`
+      <div style="margin:0 14px 14px;background:var(--info-bg);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;color:var(--info);line-height:1.5">
+        💡 ${a.commentaire}
+      </div>`:''}
+
+      <!-- Nav -->
+      <div style="padding:10px 14px 14px;display:flex;gap:8px;border-top:1px solid var(--border)">
+        ${anec.idx>0?`<button class="btn btn-sm" onclick="anecPrev()">← Précédent</button>`:''}
+        <div style="flex:1"></div>
+        ${alreadyAnswered?`<button class="btn btn-gold btn-sm" onclick="anecNext()">
+          ${anec.idx<total-1?'Suivant →':'Terminer ✓'}
+        </button>`:''}
+      </div>
+    </div>
+
+    <!-- Dots -->
+    <div style="display:flex;flex-wrap:wrap;gap:4px;padding:8px 0">
+      ${appData.anecdotes.map((_, i)=>{
+        const ans=anec.answered.find(x=>x.idx===i);
+        const bg=ans?(ans.correct?'var(--success)':'var(--danger)'):(i===anec.idx?'var(--gold)':'var(--border)');
+        const col=ans||i===anec.idx?'white':'var(--ink-muted)';
+        return`<div style="width:24px;height:24px;border-radius:50%;background:${bg};color:${col};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0">${i+1}</div>`;
+      }).join('')}
+    </div>`;
+}
+
+function anecSelectTeam(name){
+  const isLocked=!!(appData.locked[name]||{})[currentGMStation];
+  if(isLocked){
+    showToast({icon:'🔒',title:`${name} a déjà joué cette épreuve`,msg:`Score verrouillé : ${(appData.scores[name]||{})[currentGMStation]??0} pts`,duration:4000});
+    return;
+  }
+  anec.team=name; anec.idx=0; anec.score=0; anec.answered=[]; anec.finished=false;
+  renderAnecdotesGame();
+}
+
+function anecAnswer(chosen){
+  const a=appData.anecdotes[anec.idx];
+  if(!a) return;
+  const correct=chosen===a.reponse;
+  if(correct) anec.score++;
+  anec.answered.push({idx:anec.idx,correct,chosen});
+  renderAnecdotesGame();
+}
+
+function anecNext(){
+  anec.idx++;
+  if(anec.idx>=appData.anecdotes.length) anec.finished=true;
+  renderAnecdotesGame();
+}
+
+function anecPrev(){
+  if(anec.idx>0){ anec.idx--; renderAnecdotesGame(); }
+}
+
+async function anecSaveScore(){
+  if(!anec.team) return;
+  const score=anec.score;
+  appData.scores[anec.team][currentGMStation]=score;
+  if(!appData.locked[anec.team]) appData.locked[anec.team]={};
+  appData.locked[anec.team][currentGMStation]=true;
+  await db.from('scores').upsert({
+    equipe_nom:anec.team,epreuve_id:currentGMStation,
+    score,locked:true,updated_at:new Date().toISOString()
+  },{onConflict:'equipe_nom,epreuve_id'});
+  showSaveMsg('anecSaveMsg');
+  showToast({icon:'🎭',title:`${score} pts verrouillés pour ${anec.team}`,type:'success',duration:3000});
+}
+function renderAnecdotesEditor(){
+  if(!appData.anecdotes.length) return `<div style="font-size:13px;color:var(--ink-muted);font-style:italic;padding:4px 0">Aucune anecdote — cliquez "+ Ajouter"</div>`;
+  return appData.anecdotes.map((a,i)=>`
+    <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:8px;background:var(--cream)">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+        <span style="font-size:12px;color:var(--ink-muted);min-width:20px">${i+1}</span>
+        <span style="font-size:12px;font-weight:500;color:var(--gold-dark)">Celui qui…</span>
+        <button class="btn btn-sm btn-danger" style="margin-left:auto;padding:3px 10px;font-size:11px" onclick="deleteAnecdote(${i})">Supprimer</button>
+      </div>
+      <input type="text" value="${(a.celui_qui||'').replace(/"/g,'&quot;')}" placeholder="A fait le premier pas..." onchange="updateAnecdote(${i},'celui_qui',this.value)"
+        style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:14px;margin-bottom:8px">
+      <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+        <span style="font-size:12px;color:var(--ink-muted);flex-shrink:0">Réponse :</span>
+        ${['Lui','Elle','Les 2'].map(r=>`<button onclick="updateAnecdote(${i},'reponse','${r}');document.getElementById('anecdotesEditor').innerHTML=renderAnecdotesEditor()"
+          style="padding:5px 14px;border-radius:var(--radius-pill);border:1.5px solid ${a.reponse===r?'var(--gold)':'var(--border)'};
+          background:${a.reponse===r?'var(--gold-light)':'transparent'};color:${a.reponse===r?'var(--gold-dark)':'var(--ink)'};
+          font-family:'DM Sans',sans-serif;font-size:13px;font-weight:${a.reponse===r?'500':'400'};cursor:pointer">${r}</button>`).join('')}
+      </div>
+      <input type="text" value="${(a.commentaire||'').replace(/"/g,'&quot;')}" placeholder="Commentaire optionnel affiché si mauvaise réponse..." onchange="updateAnecdote(${i},'commentaire',this.value)"
+        style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
+    </div>`).join('');
+}
+
+function addAnecdote(){
+  appData.anecdotes.push({celui_qui:'',reponse:'Lui',commentaire:'',ordre:appData.anecdotes.length});
+  document.getElementById('anecdotesEditor').innerHTML=renderAnecdotesEditor();
+}
+function updateAnecdote(i,field,val){ appData.anecdotes[i][field]=val; }
+function deleteAnecdote(i){
+  appData.anecdotes.splice(i,1);
+  document.getElementById('anecdotesEditor').innerHTML=renderAnecdotesEditor();
+}
+
+async function saveAnecdotesAndEpreuve(){
+  await saveEpreuve();
+  // Delete all and re-insert
+  await db.from('anecdotes').delete().neq('id',0);
+  const rows=appData.anecdotes
+    .filter(a=>a.celui_qui.trim())
+    .map((a,i)=>({celui_qui:a.celui_qui,reponse:a.reponse,commentaire:a.commentaire||'',ordre:i}));
+  if(rows.length) await db.from('anecdotes').insert(rows);
+  showSaveMsg('epSaveMsg');
+  showToast({icon:'✅',title:`${rows.length} anecdote${rows.length>1?'s':''} sauvegardée${rows.length>1?'s':''}`,duration:3000});
+}
 async function renderAdminArchive(){
   const {data:archives}=await db.from('photos_archive').select('*').order('archived_at',{ascending:false});
   const el=document.getElementById('adminArchiveContent');
