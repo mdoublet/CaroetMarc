@@ -731,6 +731,17 @@ function setupGMInterface(){
       document.getElementById('gAnecdotes').classList.add('active');
       renderAnecdotesGame();
     }
+  } else if(ep.type==='frise'){
+    const anecdotesTab=document.getElementById('gmAnecdotesTab');
+    if(anecdotesTab){
+      anecdotesTab.textContent='🎭 Jeu';
+      anecdotesTab.style.display='inline-flex';
+      document.querySelectorAll('#gmNavTabs .nav-tab').forEach(b=>b.classList.remove('active'));
+      anecdotesTab.classList.add('active');
+      document.querySelectorAll('#gmApp .page').forEach(p=>p.classList.remove('active'));
+      document.getElementById('gAnecdotes').classList.add('active');
+      renderFriseAnecdotesGame();
+    }
   } else {
     scoreTab.style.display='inline-flex';
   }
@@ -773,7 +784,11 @@ function gmTab(name,btn){
   if(name==='photos'){gmRefusedCount=0;updateGMPhotoBadge(0);}
   if(name==='petitbac') renderPetitBacGameScreen();
   if(name==='scorefin') renderPetitBacScoreFin();
-  if(name==='anecdotes') renderAnecdotesGame();
+  if(name==='anecdotes'){
+    const ep=appData.epreuves.find(e=>e.id===currentGMStation);
+    if(ep&&ep.type==='frise') renderFriseAnecdotesGame();
+    else renderAnecdotesGame();
+  }
 }
 
 // ===================== PIN CONFIG =====================
@@ -816,19 +831,45 @@ function renderJoueurs(){
   let html='';
   teamOrder.forEach(t=>{
     if(!byTeam[t]||!byTeam[t].length) return;
-    html+=`<div style="font-size:12px;font-weight:500;color:var(--gold-dark);margin:10px 0 4px;padding-left:2px">${t}</div>`;
+    html+=`<div style="font-size:12px;font-weight:500;color:var(--gold-dark);margin:10px 0 6px;padding-left:2px">${t}</div>`;
     byTeam[t].sort((a,b)=>a.nom.localeCompare(b.nom,'fr')).forEach(j=>{
-      html+=`<div class="joueur-row">
-        <span class="joueur-nom">${j.nom}</span>
-        <select class="joueur-equipe-select" onchange="updateJoueurEquipe(${j.id},this.value)">
-          <option value="">Sans équipe</option>
-          ${appData.teams.map(t2=>`<option value="${t2}"${t2===j.equipe_nom?' selected':''}>${t2}</option>`).join('')}
-        </select>
-        <button class="joueur-delete" onclick="deleteJoueur(${j.id})" title="Supprimer">✕</button>
+      html+=`<div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;background:var(--warm-white)">
+        <div class="joueur-row" style="border:none;padding:0 0 8px 0;margin:0">
+          <span class="joueur-nom" style="font-weight:500">${j.nom}</span>
+          <select class="joueur-equipe-select" onchange="updateJoueurEquipe(${j.id},this.value)">
+            <option value="">Sans équipe</option>
+            ${appData.teams.map(t2=>`<option value="${t2}"${t2===j.equipe_nom?' selected':''}>${t2}</option>`).join('')}
+          </select>
+          <button class="joueur-delete" onclick="deleteJoueur(${j.id})" title="Supprimer">✕</button>
+        </div>
+        <div style="margin-bottom:6px">
+          <div style="font-size:11px;font-weight:500;color:var(--ink-muted);margin-bottom:3px;letter-spacing:.3px">ANECDOTE</div>
+          <input type="text" value="${(j.anecdote||'').replace(/"/g,'&quot;')}" placeholder="Ex : A fait le voyage le plus long pour venir..." 
+            onchange="updateJoueurAnecdoteLocal(${j.id},'anecdote',this.value)"
+            style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
+        </div>
+        <div style="margin-bottom:8px">
+          <div style="font-size:11px;font-weight:500;color:var(--ink-muted);margin-bottom:3px;letter-spacing:.3px">COMMENTAIRE <span style="font-weight:400;font-style:italic">(affiché après la réponse)</span></div>
+          <input type="text" value="${(j.commentaire||'').replace(/"/g,'&quot;')}" placeholder="Ex : Il a pris l'avion depuis Tokyo !" 
+            onchange="updateJoueurAnecdoteLocal(${j.id},'commentaire',this.value)"
+            style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
+        </div>
+        <button class="btn btn-sm btn-gold" onclick="saveJoueurAnecdote(${j.id})">💾 Enregistrer</button>
+        <span class="save-msg" id="joueurSaveMsg_${j.id}" style="margin-left:8px">Sauvegardé ✓</span>
       </div>`;
     });
   });
   document.getElementById('joueursList').innerHTML=html;
+}
+function updateJoueurAnecdoteLocal(id,field,val){
+  const j=appData.joueurs.find(x=>x.id===id);
+  if(j) j[field]=val;
+}
+async function saveJoueurAnecdote(id){
+  const j=appData.joueurs.find(x=>x.id===id);
+  if(!j) return;
+  await db.from('joueurs').update({anecdote:j.anecdote||'',commentaire:j.commentaire||''}).eq('id',id);
+  showSaveMsg('joueurSaveMsg_'+id);
 }
 async function addJoueur(){
   const nom=document.getElementById('newPlayerName').value.trim();
@@ -1333,6 +1374,199 @@ async function anecSaveScore(){
   showSaveMsg('anecSaveMsg');
   showToast({icon:'🎭',title:`${score} pts verrouillés pour ${anec.team}`,type:'success',duration:3000});
 }
+
+// ===================== FRISE: JEU ANECDOTES JOUEURS =====================
+let friseAnec = {
+  team: null,
+  joueurs: [],   // joueurs de l'équipe ayant une anecdote
+  idx: 0,
+  score: 0,
+  answered: [],  // {idx, correct, chosenId, correctId}
+  finished: false
+};
+
+function renderFriseAnecdotesGame(){
+  const el=document.getElementById('gmAnecdotesContent');
+  if(!el) return;
+
+  const teamBtns=appData.teams.map(t=>{
+    const isLocked=!!(appData.locked[t]||{})[currentGMStation];
+    const score=(appData.scores[t]||{})[currentGMStation];
+    return`<button class="team-btn${friseAnec.team===t?' selected':''}" onclick="friseAnecSelectTeam('${t}')">
+      ${t}${isLocked?' 🔒':''}
+      <div style="font-size:11px;color:var(--ink-muted);margin-top:2px">${isLocked?`Terminé · ${score??0} pt${score!==1?'s':''}`:'En attente'}</div>
+    </button>`;
+  }).join('');
+
+  if(!friseAnec.team){
+    el.innerHTML=`<div class="card"><div class="card-title">Sélectionner l'équipe qui joue</div><div class="team-grid">${teamBtns}</div></div>
+    <div class="notice">Sélectionnez une équipe pour commencer.</div>`;
+    return;
+  }
+
+  const joueurs=friseAnec.joueurs;
+  const total=joueurs.length;
+
+  if(!total){
+    el.innerHTML=`<div class="card"><div class="card-title">Changer d'équipe</div><div class="team-grid">${teamBtns}</div></div>
+    <div class="warn">⚠️ Aucune anecdote configurée pour les joueurs de cette équipe.<br>Ajoutez-en dans Admin > Joueurs.</div>`;
+    return;
+  }
+
+  if(friseAnec.finished || friseAnec.idx>=total){
+    // Récap final
+    const grid=joueurs.map((j,i)=>{
+      const ans=friseAnec.answered.find(x=>x.idx===i);
+      const ok=ans?.correct;
+      const wrong=appData.joueurs.find(x=>x.id===ans?.chosenId);
+      return`<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start">
+        <div style="width:22px;height:22px;border-radius:50%;background:${ok?'var(--success-bg)':'var(--danger-bg)'};color:${ok?'var(--success)':'var(--danger)'};display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;margin-top:2px">${ok?'✓':'✗'}</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-style:italic;color:var(--ink-soft)">"${j.anecdote}"</div>
+          <div style="font-size:12px;color:var(--gold-dark);font-weight:500;margin-top:2px">→ ${j.nom}</div>
+          ${ans&&!ok?`<div style="font-size:12px;color:var(--danger)">Réponse donnée : ${wrong?.nom||'?'}</div>`:''}
+          ${j.commentaire?`<div style="font-size:12px;color:var(--ink-muted);margin-top:2px">💡 ${j.commentaire}</div>`:''}
+        </div>
+      </div>`;
+    }).join('');
+
+    el.innerHTML=`
+      <div class="card"><div class="card-title" style="margin-bottom:6px">Changer d'équipe</div><div class="team-grid">${teamBtns}</div></div>
+      <div class="card" style="text-align:center">
+        <div style="font-size:13px;color:var(--ink-muted);margin-bottom:8px">Partie terminée — <strong>${friseAnec.team}</strong></div>
+        <div style="font-size:64px;font-weight:400;font-family:'Playfair Display',serif;color:var(--gold-dark);line-height:1">${friseAnec.score}</div>
+        <div style="font-size:15px;color:var(--ink-muted);margin:6px 0 16px">point${friseAnec.score!==1?'s':''} sur ${total}</div>
+        <button class="btn btn-gold btn-full" onclick="friseAnecSaveScore()">💾 Enregistrer (${friseAnec.score} pts)</button>
+        <span class="save-msg" id="friseAnecSaveMsg" style="display:block;margin-top:8px;text-align:center">Score enregistré ✓</span>
+      </div>
+      <div class="card"><div class="card-title">Récapitulatif</div>${grid}</div>`;
+    return;
+  }
+
+  const j=joueurs[friseAnec.idx];
+  const prevAns=friseAnec.answered.find(x=>x.idx===friseAnec.idx);
+  const alreadyAnswered=!!prevAns;
+  const progress=Math.round(friseAnec.idx/total*100);
+
+  // Boutons de réponse = tous les joueurs de l'équipe (avec ou sans anecdote)
+  const allTeamPlayers=appData.joueurs.filter(p=>p.equipe_nom===friseAnec.team);
+
+  const playerBtns=allTeamPlayers.map(p=>{
+    let bg='var(--warm-white)', border='var(--border)', col='var(--ink)', extra='';
+    if(alreadyAnswered){
+      const isCorrect=p.id===j.id;
+      const isChosen=p.id===prevAns.chosenId;
+      if(isCorrect){ bg='var(--success-bg)'; border='var(--success)'; col='var(--success)'; extra='font-weight:600'; }
+      else if(isChosen){ bg='var(--danger-bg)'; border='var(--danger)'; col='var(--danger)'; extra='font-weight:600'; }
+      else { bg='#F5F3EE'; col='var(--ink-muted)'; }
+    }
+    return`<button onclick="${alreadyAnswered?'':'friseAnecAnswer('+p.id+')'}"
+      style="padding:12px 10px;border-radius:var(--radius);border:2px solid ${border};
+      background:${bg};color:${col};font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;
+      ${extra};cursor:${alreadyAnswered?'default':'pointer'};transition:all .15s;text-align:center;
+      width:100%">${p.nom}</button>`;
+  }).join('');
+
+  el.innerHTML=`
+    <div class="card"><div class="card-title" style="margin-bottom:6px">Équipe : <span style="color:var(--gold-dark)">${friseAnec.team}</span></div><div class="team-grid">${teamBtns}</div></div>
+
+    <div style="background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+      <!-- Barre de progression -->
+      <div style="height:4px;background:var(--border)"><div style="height:4px;background:var(--gold);width:${progress}%;transition:width .3s"></div></div>
+
+      <!-- En-tête -->
+      <div style="padding:12px 16px 6px;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:12px;color:var(--ink-muted)">Anecdote ${friseAnec.idx+1} / ${total}</div>
+        <div style="font-size:13px;font-weight:500;color:var(--gold-dark)">${friseAnec.score} pt${friseAnec.score!==1?'s':''}</div>
+      </div>
+
+      <!-- Anecdote -->
+      <div style="padding:16px 16px 8px;text-align:center">
+        <div style="font-size:13px;color:var(--ink-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">De qui s'agit-il ?</div>
+        <div style="font-size:20px;font-weight:500;font-family:'Playfair Display',serif;color:var(--ink);line-height:1.4;font-style:italic">"${j.anecdote}"</div>
+      </div>
+
+      <!-- Boutons joueurs -->
+      <div style="padding:12px 14px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${playerBtns}
+      </div>
+
+      <!-- Commentaire (après réponse) -->
+      ${alreadyAnswered&&j.commentaire?`
+      <div style="margin:0 14px 14px;background:${prevAns.correct?'var(--success-bg)':'var(--info-bg)'};border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;color:${prevAns.correct?'var(--success)':'var(--info)'};line-height:1.5">
+        💡 ${j.commentaire}
+      </div>`:''}
+
+      <!-- Navigation -->
+      <div style="padding:10px 14px 14px;display:flex;gap:8px;border-top:1px solid var(--border)">
+        <div style="flex:1"></div>
+        ${alreadyAnswered?`<button class="btn btn-gold btn-sm" onclick="friseAnecNext()">
+          ${friseAnec.idx<total-1?'Suivant →':'Terminer ✓'}
+        </button>`:''}
+      </div>
+    </div>
+
+    <!-- Points de progression -->
+    <div style="display:flex;flex-wrap:wrap;gap:4px;padding:10px 0">
+      ${joueurs.map((_,i)=>{
+        const ans=friseAnec.answered.find(x=>x.idx===i);
+        const bg=ans?(ans.correct?'var(--success)':'var(--danger)'):(i===friseAnec.idx?'var(--gold)':'var(--border)');
+        const col=ans||i===friseAnec.idx?'white':'var(--ink-muted)';
+        return`<div style="width:24px;height:24px;border-radius:50%;background:${bg};color:${col};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0">${i+1}</div>`;
+      }).join('')}
+    </div>`;
+}
+
+function friseAnecSelectTeam(name){
+  const isLocked=!!(appData.locked[name]||{})[currentGMStation];
+  if(isLocked){
+    showToast({icon:'🔒',title:`${name} a déjà joué`,msg:`Score verrouillé : ${(appData.scores[name]||{})[currentGMStation]??0} pts`,duration:4000});
+    return;
+  }
+  // Joueurs de l'équipe ayant une anecdote configurée
+  const joueurs=appData.joueurs.filter(j=>j.equipe_nom===name&&j.anecdote&&j.anecdote.trim());
+  friseAnec.team=name;
+  friseAnec.joueurs=joueurs;
+  friseAnec.idx=0;
+  friseAnec.score=0;
+  friseAnec.answered=[];
+  friseAnec.finished=false;
+  renderFriseAnecdotesGame();
+}
+
+function friseAnecAnswer(chosenId){
+  const j=friseAnec.joueurs[friseAnec.idx];
+  if(!j) return;
+  const correct=chosenId===j.id;
+  if(correct) friseAnec.score++;
+  friseAnec.answered.push({idx:friseAnec.idx,correct,chosenId,correctId:j.id});
+  renderFriseAnecdotesGame();
+}
+
+function friseAnecNext(){
+  friseAnec.idx++;
+  if(friseAnec.idx>=friseAnec.joueurs.length){
+    friseAnec.finished=true;
+    renderFriseAnecdotesGame();
+    friseAnecSaveScore();
+  } else {
+    renderFriseAnecdotesGame();
+  }
+}
+
+async function friseAnecSaveScore(){
+  if(!friseAnec.team) return;
+  const score=friseAnec.score;
+  appData.scores[friseAnec.team][currentGMStation]=score;
+  if(!appData.locked[friseAnec.team]) appData.locked[friseAnec.team]={};
+  appData.locked[friseAnec.team][currentGMStation]=true;
+  await db.from('scores').upsert({
+    equipe_nom:friseAnec.team,epreuve_id:currentGMStation,
+    score,locked:true,updated_at:new Date().toISOString()
+  },{onConflict:'equipe_nom,epreuve_id'});
+  showSaveMsg('friseAnecSaveMsg');
+  showToast({icon:'🎭',title:`${score} pts verrouillés pour ${friseAnec.team}`,type:'success',duration:3000});
+}
 function renderAnecdotesEditor(){
   if(!appData.anecdotes.length) return `<div style="font-size:13px;color:var(--ink-muted);font-style:italic;padding:4px 0">Aucune anecdote — cliquez "+ Ajouter"</div>`;
   return appData.anecdotes.map((a,i)=>`
@@ -1554,7 +1788,19 @@ function renderGMInstructions(){
   if(ep.type==='villes'){
     // No extra block — instructions from DB are shown above, with the notice
   }  if(ep.type==='frise'&&qs.length){h+=`<div class="card"><div class="card-title">Ordre correct de la frise</div>${qs.map((q,i)=>{const c=q.contenu||{};return`<div class="frise-item"><span class="frise-num">${i+1}</span><span style="flex:1;font-size:13px">${c.evenement||'—'}</span><span style="color:var(--ink-muted);font-size:12px">${c.annee||''}</span></div>`;}).join('')}</div>`;}
-  document.getElementById('gmInstructionsContent').innerHTML=h;
+  if(ep.type==='frise'){
+    const joueursDuJeu=appData.joueurs.filter(j=>j.anecdote&&j.anecdote.trim());
+    h+=`<div class="card"><div class="card-title">Anecdotes des joueurs</div>
+      <div class="notice" style="margin-bottom:10px">Chaque anecdote correspond à un joueur de l'équipe. Le GM lit l'anecdote et les joueurs doivent deviner de qui il s'agit.</div>
+      ${joueursDuJeu.length
+        ? joueursDuJeu.map(j=>`<div style="padding:8px 0;border-bottom:1px solid var(--border)">
+            <div style="font-size:13px;font-style:italic;color:var(--ink)">"${j.anecdote}"</div>
+            <div style="font-size:12px;color:var(--gold-dark);margin-top:3px;font-weight:500">→ ${j.nom}${j.commentaire?` · <span style="color:var(--ink-muted);font-weight:400">${j.commentaire}</span>`:''}</div>
+          </div>`).join('')
+        : '<div style="font-size:13px;color:var(--ink-muted)">Aucune anecdote configurée. Ajoutez-en dans Admin > Joueurs.</div>'
+      }
+    </div>`;
+  }  document.getElementById('gmInstructionsContent').innerHTML=h;
 }
 function gmReveal(btn,isCorrect){btn.parentElement.querySelectorAll('.q-opt').forEach(b=>{b.disabled=true;b.classList.remove('correct','wrong');});btn.classList.add(isCorrect?'correct':'wrong');}
 
