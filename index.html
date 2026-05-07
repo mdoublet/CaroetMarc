@@ -261,18 +261,17 @@ input[type=file]{display:none}
     <button class="logout-btn" onclick="logout()">Quitter</button>
   </div>
   <div class="nav-tabs" id="adminNavTabs">
-    <button class="nav-tab active" onclick="adminTab('epreuves',this)">Épreuves</button>
-    <button class="nav-tab" onclick="adminTab('equipes',this)">Équipes</button>
+    <button class="nav-tab active" onclick="adminTab('equipes',this)">Équipes</button>
     <button class="nav-tab" onclick="adminTab('joueurs',this)">Joueurs</button>
-    <button class="nav-tab" onclick="adminTab('config',this)">Codes</button>
+    <button class="nav-tab" onclick="adminTab('epreuves',this)">Épreuves</button>
     <button class="nav-tab" onclick="adminTab('scores',this)">Scores</button>
+    <div style="width:1px;background:var(--border);margin:8px 4px;flex-shrink:0"></div>
     <button class="nav-tab" onclick="adminTab('photos',this)">Photos <span class="notif-badge" id="adminPhotoBadge">0</span></button>
-    <button class="nav-tab" onclick="adminTab('archive',this)">Archive</button>
-    <button class="nav-tab" onclick="adminTab('classement',this)">Classement</button>
-    <button class="nav-tab" onclick="adminTab('reset',this)">Reset</button>
+    <button class="nav-tab" onclick="adminTab('reset',this)">Archiver</button>
+    <button class="nav-tab" onclick="adminTab('archive',this)">Archives</button>
   </div>
-  <div id="aEpreuves" class="page active"><div class="ep-tabs" id="adminEpTabs"></div><div id="adminEpEditor"></div></div>
-  <div id="aEquipes" class="page">
+  <div id="aEpreuves" class="page"><div class="ep-tabs" id="adminEpTabs"></div><div id="adminEpEditor"></div></div>
+  <div id="aEquipes" class="page active">
     <div class="card"><div class="card-title">Noms des équipes</div><div id="teamNameFields"></div>
     <button class="btn btn-gold" onclick="saveTeams()">Enregistrer</button><span class="save-msg" id="teamSaveMsg">Sauvegardé ✓</span></div>
   </div>
@@ -314,7 +313,7 @@ input[type=file]{display:none}
   <div id="aPetitBac" class="page"><div id="adminPetitBacContent"></div></div>
   <div id="aClassement" class="page"><div id="adminLeaderboard"></div><button class="btn btn-sm" style="margin-top:1rem" onclick="renderLeaderboard('adminLeaderboard')">Actualiser</button></div>
   <div id="aReset" class="page">
-    <div class="warn">⚠️ Remet les scores à zéro et archive toutes les photos.</div>
+    <div class="warn">⚠️ Remet les scores à zéro et archive toutes les photos et les réponses et scores actuels.</div>
     <button class="btn btn-danger" onclick="openResetModal()">Réinitialiser et archiver</button>
   </div>
 </div>
