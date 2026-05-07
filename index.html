@@ -1370,6 +1370,26 @@ async function anecSaveScore(){
     equipe_nom:anec.team,epreuve_id:currentGMStation,
     score,locked:true,updated_at:new Date().toISOString()
   },{onConflict:'equipe_nom,epreuve_id'});
+  // Save detailed responses for later archive
+  if(anec.answered.length){
+    const now=new Date().toISOString();
+    await db.from('reponses_detail_archive').upsert(
+      anec.answered.map(a=>{
+        const q=appData.anecdotes[a.idx];
+        return {
+          archive_label:'__live__',
+          jeu:'maries',
+          equipe_nom:anec.team,
+          question_texte:q?q.celui_qui:'?',
+          reponse_correcte:q?q.reponse:'?',
+          reponse_donnee:a.chosen||'',
+          correct:a.correct,
+          archived_at:now
+        };
+      }),
+      {onConflict:'archive_label,jeu,equipe_nom,question_texte'}
+    );
+  }
   showSaveMsg('anecSaveMsg');
   showToast({icon:'🎭',title:`${score} pts verrouillés pour ${anec.team}`,type:'success',duration:3000});
 }
@@ -1563,6 +1583,27 @@ async function friseAnecSaveScore(){
     equipe_nom:friseAnec.team,epreuve_id:currentGMStation,
     score,locked:true,updated_at:new Date().toISOString()
   },{onConflict:'equipe_nom,epreuve_id'});
+  // Save detailed responses for later archive
+  if(friseAnec.answered.length){
+    const now=new Date().toISOString();
+    await db.from('reponses_detail_archive').upsert(
+      friseAnec.answered.map(a=>{
+        const j=friseAnec.joueurs[a.idx];
+        const chosen=appData.joueurs.find(x=>x.id===a.chosenId);
+        return {
+          archive_label:'__live__',
+          jeu:'invites',
+          equipe_nom:friseAnec.team,
+          question_texte:j?j.anecdote:'?',
+          reponse_correcte:j?j.nom:'?',
+          reponse_donnee:chosen?chosen.nom:'?',
+          correct:a.correct,
+          archived_at:now
+        };
+      }),
+      {onConflict:'archive_label,jeu,equipe_nom,question_texte'}
+    );
+  }
   showSaveMsg('friseAnecSaveMsg');
   showToast({icon:'🎭',title:`${score} pts verrouillés pour ${friseAnec.team}`,type:'success',duration:3000});
 }
@@ -1614,40 +1655,89 @@ async function renderAdminArchive(){
   const el=document.getElementById('adminArchiveContent');
   el.innerHTML='<div class="loader-text" style="padding:1rem">Chargement...</div>';
 
-  const [{data:photoArchive},{data:pbArchive},{data:scoresArchive}]=await Promise.all([
+  const [{data:photoArchive},{data:pbArchive},{data:scoresArchive},{data:detailArchive}]=await Promise.all([
     db.from('photos_archive').select('*').order('archived_at',{ascending:false}),
     db.from('petit_bac_archive').select('*').order('archived_at',{ascending:false}),
-    db.from('scores_archive').select('*').order('archived_at',{ascending:false})
+    db.from('scores_archive').select('*').order('archived_at',{ascending:false}),
+    db.from('reponses_detail_archive').select('*').order('archived_at',{ascending:false})
   ]);
 
-  // Collect all session labels across all tables
   const allLabels=new Set([
     ...(photoArchive||[]).map(r=>r.archive_label),
     ...(pbArchive||[]).map(r=>r.archive_label),
-    ...(scoresArchive||[]).map(r=>r.archive_label)
+    ...(scoresArchive||[]).map(r=>r.archive_label),
+    ...(detailArchive||[]).filter(r=>r.archive_label!=='__live__').map(r=>r.archive_label)
   ]);
 
   if(!allLabels.size){ el.innerHTML='<div class="notice">Aucune archive disponible. Les données seront archivées lors du prochain reset.</div>'; return; }
+
+  // Helper: build a cross-table for a set of detail rows
+  function buildDetailTable(rows, questionKey, answerLabel){
+    if(!rows.length) return '';
+    const teams=[...new Set(rows.map(r=>r.equipe_nom))].sort();
+    // Gather unique questions in order
+    const questions=[...new Map(rows.map(r=>[r.question_texte,{q:r.question_texte,correct:r.reponse_correcte}])).values()];
+    // Index: [question_texte][equipe_nom] -> {correct, reponse_donnee}
+    const idx={};
+    rows.forEach(r=>{
+      if(!idx[r.question_texte]) idx[r.question_texte]={};
+      idx[r.question_texte][r.equipe_nom]={correct:r.correct,rep:r.reponse_donnee};
+    });
+    // Scores per team
+    const teamScores={};
+    teams.forEach(t=>{ teamScores[t]=rows.filter(r=>r.equipe_nom===t&&r.correct).length; });
+
+    const thStyle=`padding:7px 8px;font-size:11px;font-weight:500;color:var(--ink-muted);text-align:center;border-bottom:1px solid var(--border);border-left:1px solid var(--border)`;
+    const tdStyle=(correct)=>`padding:7px 8px;text-align:center;font-size:13px;border-bottom:1px solid var(--border);border-left:1px solid var(--border);background:${correct?'var(--success-bg)':'var(--danger-bg)'};color:${correct?'var(--success)':'var(--danger)'}`;
+    const tdNeutral=`padding:7px 8px;text-align:center;font-size:13px;border-bottom:1px solid var(--border);border-left:1px solid var(--border);color:var(--ink-muted)`;
+
+    return `<div style="overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border)">
+      <table style="width:100%;border-collapse:collapse;min-width:320px">
+        <thead><tr style="background:var(--cream)">
+          <th style="padding:7px 10px;font-size:11px;font-weight:500;color:var(--ink-muted);text-align:left;border-bottom:1px solid var(--border);max-width:140px">${questionKey}</th>
+          <th style="padding:7px 8px;font-size:11px;font-weight:500;color:var(--ink-muted);text-align:center;border-bottom:1px solid var(--border);border-left:1px solid var(--border)">${answerLabel}</th>
+          ${teams.map(t=>`<th style="${thStyle}">${t}</th>`).join('')}
+        </tr></thead>
+        <tbody>
+          ${questions.map(({q,correct})=>{
+            const entry=idx[q]||{};
+            return`<tr>
+              <td style="padding:7px 10px;font-size:12px;border-bottom:1px solid var(--border);font-style:italic;max-width:140px;word-break:break-word">${q}</td>
+              <td style="padding:7px 8px;text-align:center;font-size:12px;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);color:var(--gold-dark)">${correct}</td>
+              ${teams.map(t=>{
+                const a=entry[t];
+                if(!a) return`<td style="${tdNeutral}">—</td>`;
+                return`<td style="${tdStyle(a.correct)}">${a.correct?'✓':'✗'}${!a.correct&&a.rep?`<br><span style="font-size:10px">${a.rep}</span>`:''}`;
+              }).join('')}
+            </tr>`;
+          }).join('')}
+          <tr style="background:var(--cream)">
+            <td style="padding:7px 10px;font-size:12px;font-weight:600;border-top:2px solid var(--border)">TOTAL</td>
+            <td style="border-left:1px solid var(--border);border-top:2px solid var(--border)"></td>
+            ${teams.map(t=>`<td style="padding:7px 8px;text-align:center;font-size:13px;font-weight:700;color:var(--gold-dark);border-left:1px solid var(--border);border-top:2px solid var(--border)">${teamScores[t]??0}</td>`).join('')}
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+  }
 
   let html='';
   [...allLabels].sort().reverse().forEach(label=>{
     const photos=(photoArchive||[]).filter(r=>r.archive_label===label);
     const pbReps=(pbArchive||[]).filter(r=>r.archive_label===label);
     const scoreRows=(scoresArchive||[]).filter(r=>r.archive_label===label);
+    const mariesRows=(detailArchive||[]).filter(r=>r.archive_label===label&&r.jeu==='maries');
+    const invitesRows=(detailArchive||[]).filter(r=>r.archive_label===label&&r.jeu==='invites');
 
     html+=`<div style="margin-bottom:32px">
       <div style="font-size:15px;font-weight:500;color:var(--ink);padding:10px 14px;background:var(--gold-light);border-radius:var(--radius);margin-bottom:14px;display:flex;align-items:center;gap:8px">
         <span>📁</span><span>${label}</span>
       </div>`;
 
-    // ---- Classement de la session ----
+    // ---- Classement ----
     if(scoreRows.length){
-      // Compute totals per team
       const totals={};
-      scoreRows.forEach(r=>{
-        if(!totals[r.equipe_nom]) totals[r.equipe_nom]=0;
-        totals[r.equipe_nom]+=(r.score||0);
-      });
+      scoreRows.forEach(r=>{ if(!totals[r.equipe_nom]) totals[r.equipe_nom]=0; totals[r.equipe_nom]+=(r.score||0); });
       const ranked=Object.entries(totals).sort((a,b)=>b[1]-a[1]);
       const medals=['🥇','🥈','🥉'];
       const max=Math.max(...ranked.map(r=>r[1]),1);
@@ -1665,29 +1755,23 @@ async function renderAdminArchive(){
         </div>
       </div>`;
 
-      // ---- Détail par épreuve ----
+      // Scores par épreuve
       const byEp={};
-      scoreRows.forEach(r=>{
-        const k=r.epreuve_titre||('Épreuve '+r.epreuve_id);
-        if(!byEp[k]) byEp[k]={};
-        byEp[k][r.equipe_nom]=r.score||0;
-      });
+      scoreRows.forEach(r=>{ const k=r.epreuve_titre||('Épreuve '+r.epreuve_id); if(!byEp[k]) byEp[k]={}; byEp[k][r.equipe_nom]=r.score||0; });
       const teams=ranked.map(r=>r[0]);
-
       html+=`<div style="margin-bottom:14px">
         <div style="font-size:12px;font-weight:500;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📊 Scores par épreuve</div>
         <div style="overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border)">
           <table style="width:100%;border-collapse:collapse;min-width:280px">
             <thead><tr style="background:var(--cream)">
               <th style="padding:8px 12px;font-size:11px;font-weight:500;color:var(--ink-muted);text-align:left;border-bottom:1px solid var(--border)">Épreuve</th>
-              ${teams.map(t=>`<th style="padding:8px 8px;font-size:11px;font-weight:500;color:var(--ink-muted);text-align:center;border-bottom:1px solid var(--border)">${t}</th>`).join('')}
+              ${teams.map(t=>`<th style="padding:8px;font-size:11px;font-weight:500;color:var(--ink-muted);text-align:center;border-bottom:1px solid var(--border)">${t}</th>`).join('')}
             </tr></thead>
             <tbody>
-              ${Object.entries(byEp).map(([ep,scores])=>`
-                <tr>
-                  <td style="padding:8px 12px;font-size:12px;border-bottom:1px solid var(--border)">${ep}</td>
-                  ${teams.map(t=>`<td style="padding:8px;text-align:center;font-size:13px;font-weight:500;border-bottom:1px solid var(--border);color:var(--gold-dark)">${scores[t]!=null?scores[t]+'pts':'—'}</td>`).join('')}
-                </tr>`).join('')}
+              ${Object.entries(byEp).map(([ep,scores])=>`<tr>
+                <td style="padding:8px 12px;font-size:12px;border-bottom:1px solid var(--border)">${ep}</td>
+                ${teams.map(t=>`<td style="padding:8px;text-align:center;font-size:13px;font-weight:500;border-bottom:1px solid var(--border);color:var(--gold-dark)">${scores[t]!=null?scores[t]+' pts':'—'}</td>`).join('')}
+              </tr>`).join('')}
             </tbody>
           </table>
         </div>
@@ -1696,17 +1780,54 @@ async function renderAdminArchive(){
 
     // ---- Petit Bac ----
     if(pbReps.length){
-      const byTeam={};
-      pbReps.forEach(r=>{if(!byTeam[r.equipe_nom])byTeam[r.equipe_nom]={};byTeam[r.equipe_nom][r.lettre]=r.ville_donnee;});
+      // Build cross-table: letters as rows, teams as columns
+      const teams=[...new Set(pbReps.map(r=>r.equipe_nom))].sort();
+      const letters=[...new Set(pbReps.map(r=>r.lettre))].sort();
+      const idx={};
+      pbReps.forEach(r=>{ if(!idx[r.lettre]) idx[r.lettre]={}; idx[r.lettre][r.equipe_nom]=r.ville_donnee; });
+      const teamScores={};
+      teams.forEach(t=>{ teamScores[t]=pbReps.filter(r=>r.equipe_nom===t&&r.ville_donnee).length; });
+
+      const thS=`padding:7px 8px;font-size:11px;font-weight:500;color:var(--ink-muted);text-align:center;border-bottom:1px solid var(--border);border-left:1px solid var(--border)`;
       html+=`<div style="margin-bottom:14px">
         <div style="font-size:12px;font-weight:500;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">🏙 Petit Bac des Villes</div>
-        ${Object.entries(byTeam).map(([team,lettres])=>`
-          <div class="card" style="margin-bottom:8px">
-            <div style="font-size:13px;font-weight:500;margin-bottom:8px">${team} · ${Object.keys(lettres).length} pt${Object.keys(lettres).length!==1?'s':''}</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 12px">
-              ${Object.entries(lettres).sort().map(([l,v])=>`<div style="font-size:12px"><span style="font-weight:600;color:var(--gold-dark)">${l} —</span> <span style="color:var(--success)">${v}</span></div>`).join('')}
-            </div>
-          </div>`).join('')}
+        <div style="overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border)">
+          <table style="width:100%;border-collapse:collapse;min-width:280px">
+            <thead><tr style="background:var(--cream)">
+              <th style="padding:7px 10px;font-size:11px;font-weight:500;color:var(--ink-muted);text-align:left;border-bottom:1px solid var(--border)">Lettre</th>
+              ${teams.map(t=>`<th style="${thS}">${t}</th>`).join('')}
+            </tr></thead>
+            <tbody>
+              ${letters.map(l=>`<tr>
+                <td style="padding:7px 10px;font-size:13px;font-weight:700;border-bottom:1px solid var(--border);color:var(--gold-dark)">${l}</td>
+                ${teams.map(t=>{
+                  const v=idx[l]?.[t];
+                  return`<td style="padding:7px 8px;text-align:center;font-size:12px;border-bottom:1px solid var(--border);border-left:1px solid var(--border);${v?'color:var(--success)':'color:var(--ink-muted)'}">${v||'—'}</td>`;
+                }).join('')}
+              </tr>`).join('')}
+              <tr style="background:var(--cream)">
+                <td style="padding:7px 10px;font-size:12px;font-weight:600;border-top:2px solid var(--border)">TOTAL</td>
+                ${teams.map(t=>`<td style="padding:7px 8px;text-align:center;font-size:13px;font-weight:700;color:var(--gold-dark);border-left:1px solid var(--border);border-top:2px solid var(--border)">${teamScores[t]??0}</td>`).join('')}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+    }
+
+    // ---- Anecdotes mariés ----
+    if(mariesRows.length){
+      html+=`<div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:500;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">🎭 Anecdotes des mariés</div>
+        ${buildDetailTable(mariesRows,'Celui qui…','Lui/Elle/Les 2')}
+      </div>`;
+    }
+
+    // ---- Anecdotes invités ----
+    if(invitesRows.length){
+      html+=`<div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:500;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">🎉 Anecdotes des invités</div>
+        ${buildDetailTable(invitesRows,'Anecdote','Bonne réponse')}
       </div>`;
     }
 
@@ -1784,26 +1905,14 @@ async function confirmReset(){
         archived_at:now
       };
     }));
-
-    // Also keep anecdotes_archive for backward compat
-    const anecEp=appData.epreuves.find(e=>e.type==='qcm');
-    if(anecEp){
-      const anecScores=scores.filter(s=>s.epreuve_id===anecEp.id);
-      if(anecScores.length){
-        await db.from('anecdotes_archive').insert(anecScores.map(s=>({
-          equipe_nom:s.equipe_nom,
-          celui_qui:'(score global)',
-          reponse_correcte:`${s.score} pts`,
-          reponse_donnee:`${s.score} pts`,
-          correct:true,
-          archive_label:label,
-          archived_at:now
-        })));
-      }
-    }
   }
 
-  // 4. Delete live data
+  // 4. Re-label __live__ detail records with the real archive label
+  await db.from('reponses_detail_archive')
+    .update({archive_label:label, archived_at:now})
+    .eq('archive_label','__live__');
+
+  // 5. Delete live data
   await db.from('scores').delete().neq('id',0);
   await db.from('photos').delete().neq('id',0);
   await db.from('petit_bac_reponses').delete().neq('id',0);
