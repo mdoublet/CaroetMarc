@@ -925,17 +925,65 @@ function renderJoueurs(){
   document.getElementById('joueursList').innerHTML=html;
 }
 
-function renderJoueurCard(j){
-  const incomplete=!(j.anecdote||'').trim()||!(j.commentaire||'').trim();
+function joueurCardState(j){
+  const complete=(j.anecdote||'').trim()&&(j.commentaire||'').trim();
+  const dirty=j._dirty;
+  if(dirty) return 'orange';
+  if(complete) return 'green';
+  return 'red';
+}
+function applyJoueurCardState(id){
+  const j=appData.joueurs.find(x=>x.id===id);
+  if(!j) return;
+  const card=document.getElementById('joueurCard_'+id);
+  if(!card) return;
+  const state=joueurCardState(j);
   const anecMissing=!(j.anecdote||'').trim();
   const commMissing=!(j.commentaire||'').trim();
-  const borderColor=incomplete?'var(--danger)':'var(--border)';
-  const bg=incomplete?'#FFF8F8':'var(--warm-white)';
 
-  return`<div style="border:1px solid ${borderColor};border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;background:${bg}">
+  const colors={
+    red:  {border:'var(--danger)', bg:'#FFF8F8', badge:'Incomplet', badgeBg:'#FFE8E8', badgeCol:'var(--danger)'},
+    orange:{border:'#F59E0B',      bg:'#FFFBF0', badge:'Modifié',   badgeBg:'#FEF3C7', badgeCol:'#92400E'},
+    green: {border:'var(--success)',bg:'#F0FDF4', badge:'Complet ✓', badgeBg:'#DCFCE7', badgeCol:'var(--success)'}
+  };
+  const c=colors[state];
+  card.style.border=`1px solid ${c.border}`;
+  card.style.background=c.bg;
+
+  // Badge
+  const badge=card.querySelector('.joueur-state-badge');
+  if(badge){ badge.textContent=c.badge; badge.style.background=c.badgeBg; badge.style.color=c.badgeCol; }
+
+  // Anecdote field + label
+  const anecInput=card.querySelector('.joueur-anec-input');
+  const anecLabel=card.querySelector('.joueur-anec-label');
+  if(anecInput) anecInput.style.borderColor=anecMissing&&state==='red'?'var(--danger)':'var(--border)';
+  if(anecLabel){ anecLabel.style.color=anecMissing&&state==='red'?'var(--danger)':'var(--ink-muted)';
+    anecLabel.querySelector('.joueur-field-warn').textContent=anecMissing&&state==='red'?' ⚠ manquante':''; }
+
+  // Commentaire field + label
+  const commInput=card.querySelector('.joueur-comm-input');
+  const commLabel=card.querySelector('.joueur-comm-label');
+  if(commInput) commInput.style.borderColor=commMissing&&state==='red'?'var(--danger)':'var(--border)';
+  if(commLabel){ commLabel.style.color=commMissing&&state==='red'?'var(--danger)':'var(--ink-muted)';
+    commLabel.querySelector('.joueur-field-warn').textContent=commMissing&&state==='red'?' ⚠ manquant':''; }
+}
+
+function renderJoueurCard(j){
+  const state=joueurCardState(j);
+  const anecMissing=!(j.anecdote||'').trim();
+  const commMissing=!(j.commentaire||'').trim();
+  const colors={
+    red:  {border:'var(--danger)', bg:'#FFF8F8', badge:'Incomplet', badgeBg:'#FFE8E8', badgeCol:'var(--danger)'},
+    orange:{border:'#F59E0B',      bg:'#FFFBF0', badge:'Modifié',   badgeBg:'#FEF3C7', badgeCol:'#92400E'},
+    green: {border:'var(--success)',bg:'#F0FDF4', badge:'Complet ✓', badgeBg:'#DCFCE7', badgeCol:'var(--success)'}
+  };
+  const c=colors[state];
+
+  return`<div id="joueurCard_${j.id}" style="border:1px solid ${c.border};border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;background:${c.bg};transition:border-color .2s,background .2s">
     <div class="joueur-row" style="border:none;padding:0 0 8px 0;margin:0">
       <span class="joueur-nom" style="font-weight:500">${j.nom}</span>
-      ${incomplete?`<span style="font-size:10px;font-weight:600;color:var(--danger);background:#FFE8E8;padding:2px 7px;border-radius:10px">Incomplet</span>`:''}
+      <span class="joueur-state-badge" style="font-size:10px;font-weight:600;color:${c.badgeCol};background:${c.badgeBg};padding:2px 7px;border-radius:10px">${c.badge}</span>
       <select class="joueur-equipe-select" onchange="updateJoueurEquipe(${j.id},this.value)">
         <option value="">Sans équipe</option>
         ${appData.teams.map(t2=>`<option value="${t2}"${t2===j.equipe_nom?' selected':''}>${t2}</option>`).join('')}
@@ -943,20 +991,20 @@ function renderJoueurCard(j){
       <button class="joueur-delete" onclick="deleteJoueur(${j.id})" title="Supprimer">✕</button>
     </div>
     <div style="margin-bottom:6px">
-      <div style="font-size:11px;font-weight:500;color:${anecMissing?'var(--danger)':'var(--ink-muted)'};margin-bottom:3px;letter-spacing:.3px">
-        ANECDOTE ${anecMissing?'⚠ manquante':''}
+      <div class="joueur-anec-label" style="font-size:11px;font-weight:500;color:${anecMissing&&state==='red'?'var(--danger)':'var(--ink-muted)'};margin-bottom:3px;letter-spacing:.3px">
+        ANECDOTE<span class="joueur-field-warn">${anecMissing&&state==='red'?' ⚠ manquante':''}</span>
       </div>
-      <input type="text" value="${(j.anecdote||'').replace(/"/g,'&quot;')}" placeholder="Ex : A fait le voyage le plus long pour venir..."
-        onchange="updateJoueurAnecdoteLocal(${j.id},'anecdote',this.value)"
-        style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid ${anecMissing?'var(--danger)':'var(--border)'};background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
+      <input type="text" class="joueur-anec-input" value="${(j.anecdote||'').replace(/"/g,'&quot;')}" placeholder="Ex : A fait le voyage le plus long pour venir..."
+        oninput="updateJoueurAnecdoteLocal(${j.id},'anecdote',this.value)"
+        style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid ${anecMissing&&state==='red'?'var(--danger)':'var(--border)'};background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;transition:border-color .2s">
     </div>
     <div style="margin-bottom:8px">
-      <div style="font-size:11px;font-weight:500;color:${commMissing?'var(--danger)':'var(--ink-muted)'};margin-bottom:3px;letter-spacing:.3px">
-        COMMENTAIRE ${commMissing?'⚠ manquant':''}<span style="font-weight:400;font-style:italic;color:var(--ink-muted)"> (affiché après la réponse)</span>
+      <div class="joueur-comm-label" style="font-size:11px;font-weight:500;color:${commMissing&&state==='red'?'var(--danger)':'var(--ink-muted)'};margin-bottom:3px;letter-spacing:.3px">
+        COMMENTAIRE<span class="joueur-field-warn">${commMissing&&state==='red'?' ⚠ manquant':''}</span><span style="font-weight:400;font-style:italic;color:var(--ink-muted)"> (affiché après la réponse)</span>
       </div>
-      <input type="text" value="${(j.commentaire||'').replace(/"/g,'&quot;')}" placeholder="Ex : Il a pris l'avion depuis Tokyo !"
-        onchange="updateJoueurAnecdoteLocal(${j.id},'commentaire',this.value)"
-        style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid ${commMissing?'var(--danger)':'var(--border)'};background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
+      <input type="text" class="joueur-comm-input" value="${(j.commentaire||'').replace(/"/g,'&quot;')}" placeholder="Ex : Il a pris l'avion depuis Tokyo !"
+        oninput="updateJoueurAnecdoteLocal(${j.id},'commentaire',this.value)"
+        style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid ${commMissing&&state==='red'?'var(--danger)':'var(--border)'};background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;transition:border-color .2s">
     </div>
     <button class="btn btn-sm btn-gold" onclick="saveJoueurAnecdote(${j.id})">💾 Enregistrer</button>
     <span class="save-msg" id="joueurSaveMsg_${j.id}" style="margin-left:8px">Sauvegardé ✓</span>
@@ -964,12 +1012,19 @@ function renderJoueurCard(j){
 }
 function updateJoueurAnecdoteLocal(id,field,val){
   const j=appData.joueurs.find(x=>x.id===id);
-  if(j) j[field]=val;
+  if(!j) return;
+  j[field]=val;
+  j._dirty=true;
+  applyJoueurCardState(id);
+  renderJoueurFilterTabs();
 }
 async function saveJoueurAnecdote(id){
   const j=appData.joueurs.find(x=>x.id===id);
   if(!j) return;
   await db.from('joueurs').update({anecdote:j.anecdote||'',commentaire:j.commentaire||''}).eq('id',id);
+  j._dirty=false;
+  applyJoueurCardState(id);
+  renderJoueurFilterTabs();
   showSaveMsg('joueurSaveMsg_'+id);
 }
 async function addJoueur(){
