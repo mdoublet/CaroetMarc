@@ -274,8 +274,15 @@ input[type=file]{display:none}
   </div>
   <div id="aEpreuves" class="page"><div class="ep-tabs" id="adminEpTabs"></div><div id="adminEpEditor"></div></div>
   <div id="aEquipes" class="page active">
-    <div class="card"><div class="card-title">Noms des équipes</div><div id="teamNameFields"></div>
-    <button class="btn btn-gold" onclick="saveTeams()">Enregistrer</button><span class="save-msg" id="teamSaveMsg">Sauvegardé ✓</span></div>
+    <div class="card">
+      <div class="card-title">Équipes</div>
+      <div id="teamNameFields"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+        <button class="btn btn-sm" onclick="addTeam()">+ Ajouter une équipe</button>
+        <button class="btn btn-gold btn-sm" onclick="saveTeams()">💾 Enregistrer</button>
+        <span class="save-msg" id="teamSaveMsg">Sauvegardé ✓</span>
+      </div>
+    </div>
   </div>
   <div id="aJoueurs" class="page">
     <div class="card">
@@ -1085,14 +1092,60 @@ async function saveEpreuve(){
 }
 
 // ===================== ADMIN: EQUIPES =====================
-function renderTeamFields(){document.getElementById('teamNameFields').innerHTML=appData.teams.map((t,i)=>`<div class="field"><div class="field-label">Équipe ${i+1}</div><input type="text" class="admin-input" value="${t}" id="tname${i}"></div>`).join('');}
+function renderTeamFields(){
+  document.getElementById('teamNameFields').innerHTML=appData.teams.map((t,i)=>`
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <span style="font-size:12px;color:var(--ink-muted);min-width:20px;text-align:right">${i+1}</span>
+      <input type="text" class="admin-input" value="${t}" id="tname${i}" placeholder="Nom de l'équipe"
+        style="flex:1;font-size:14px;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif">
+      <button onclick="deleteTeam(${i})" title="Supprimer"
+        style="background:none;border:none;color:var(--danger);font-size:16px;cursor:pointer;padding:4px 6px;line-height:1">✕</button>
+    </div>`).join('');
+}
+
 async function saveTeams(){
-  const newTeams=appData.teams.map((_,i)=>document.getElementById('tname'+i).value||`Équipe ${i+1}`);
+  const inputs=appData.teams.map((_,i)=>document.getElementById('tname'+i));
+  const newTeams=inputs.map((el,i)=>(el?el.value.trim():'')||`Équipe ${i+1}`);
   for(let i=0;i<appData.teams.length;i++){
-    await db.from('equipes').update({nom:newTeams[i]}).eq('nom',appData.teams[i]);
-    if(appData.scores[appData.teams[i]]){appData.scores[newTeams[i]]=appData.scores[appData.teams[i]];delete appData.scores[appData.teams[i]];}
+    const oldName=appData.teams[i];
+    const newName=newTeams[i];
+    if(oldName===newName) continue;
+    // UPDATE equipes → cascade déclenche UPDATE joueurs automatiquement
+    await db.from('equipes').update({nom:newName}).eq('nom',oldName);
+    // Mettre à jour le state local
+    if(appData.scores[oldName]){appData.scores[newName]=appData.scores[oldName];delete appData.scores[oldName];}
+    if(appData.locked[oldName]){appData.locked[newName]=appData.locked[oldName];delete appData.locked[oldName];}
+    appData.joueurs.forEach(j=>{if(j.equipe_nom===oldName)j.equipe_nom=newName;});
   }
-  appData.teams=newTeams;showSaveMsg('teamSaveMsg');
+  appData.teams=newTeams;
+  renderTeamFields();renderJoueurs();renderAdminScores();
+  showSaveMsg('teamSaveMsg');
+}
+
+async function addTeam(){
+  const newName=`Équipe ${appData.teams.length+1}`;
+  const {error}=await db.from('equipes').insert({nom:newName});
+  if(!error){
+    appData.teams.push(newName);
+    appData.scores[newName]={};
+    renderTeamFields();renderJoueurs();
+    showToast({icon:'✅',title:`"${newName}" créée`,msg:'Renommez-la puis cliquez Enregistrer.',duration:3000});
+  }
+}
+
+async function deleteTeam(i){
+  const name=appData.teams[i];
+  const joueurs=appData.joueurs.filter(j=>j.equipe_nom===name);
+  if(joueurs.length){
+    showToast({icon:'⚠️',title:`Impossible de supprimer "${name}"`,msg:`${joueurs.length} joueur(s) dans cette équipe. Réaffectez-les d'abord.`,type:'danger',duration:5000});
+    return;
+  }
+  await db.from('equipes').delete().eq('nom',name);
+  appData.teams.splice(i,1);
+  delete appData.scores[name];
+  delete appData.locked[name];
+  renderTeamFields();renderAdminScores();
+  showToast({icon:'🗑',title:`"${name}" supprimée`,duration:2500});
 }
 
 // ===================== ADMIN: SCORES =====================
