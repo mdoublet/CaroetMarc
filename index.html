@@ -298,6 +298,13 @@ input[type=file]{display:none}
         <div class="card-title" style="margin:0">Liste des joueurs</div>
         <span id="joueurCount" style="font-size:12px;color:var(--ink-muted)"></span>
       </div>
+      <!-- Filtres équipe -->
+      <div id="joueurFilterTabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+      <!-- Filtre incomplets -->
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;cursor:pointer;font-size:13px;color:var(--ink-muted)">
+        <input type="checkbox" id="joueurFilterIncomplets" onchange="renderJoueurs()" style="width:16px;height:16px;accent-color:var(--gold-dark)">
+        Afficher uniquement les joueurs sans anecdote ou sans commentaire
+      </label>
       <div id="joueursList"></div>
     </div>
   </div>
@@ -833,56 +840,127 @@ async function savePins(){
 }
 
 // ===================== ADMIN: JOUEURS =====================
+let currentJoueurTeam = '__all__';
+
+function renderJoueurFilterTabs(){
+  const el=document.getElementById('joueurFilterTabs');
+  if(!el) return;
+  const teams=[...appData.teams,'Sans équipe'];
+  // Count incomplets per team
+  const incomplete=(t)=>appData.joueurs.filter(j=>{
+    const inTeam = t==='__all__' ? true : (j.equipe_nom||'Sans équipe')===t;
+    return inTeam && (!(j.anecdote||'').trim() || !(j.commentaire||'').trim());
+  }).length;
+
+  const tabs=[{key:'__all__',label:'Toutes'},...teams.map(t=>({key:t,label:t}))];
+  el.innerHTML=tabs.map(({key,label})=>{
+    const n=incomplete(key);
+    const active=currentJoueurTeam===key;
+    return`<button onclick="setJoueurTeamFilter('${key}')"
+      style="padding:6px 12px;border-radius:20px;border:2px solid ${active?'var(--gold-dark)':'var(--border)'};
+      background:${active?'var(--gold-light)':'var(--warm-white)'};
+      color:${active?'var(--gold-dark)':'var(--ink)'};font-family:'DM Sans',sans-serif;
+      font-size:12px;font-weight:${active?'600':'400'};cursor:pointer;
+      display:inline-flex;align-items:center;gap:5px;white-space:nowrap">
+      ${label}
+      ${n>0?`<span style="background:var(--danger);color:white;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:700">${n}</span>`:''}
+    </button>`;
+  }).join('');
+}
+
+function setJoueurTeamFilter(team){
+  currentJoueurTeam=team;
+  renderJoueurs();
+}
+
 function renderJoueurs(){
   const count=appData.joueurs.length;
   document.getElementById('joueurCount').textContent=count+' joueur'+(count>1?'s':'');
   // Populate team select for new player
   const sel=document.getElementById('newPlayerTeam');
   if(sel) sel.innerHTML='<option value="">Sans équipe</option>'+appData.teams.map(t=>`<option value="${t}">${t}</option>`).join('');
+
+  renderJoueurFilterTabs();
+
   if(!appData.joueurs.length){
     document.getElementById('joueursList').innerHTML='<div style="font-size:13px;color:var(--ink-muted);padding:8px 0">Aucun joueur pour le moment.</div>';
     return;
   }
-  // Group by team
-  const byTeam={};
-  appData.joueurs.forEach(j=>{
-    const k=j.equipe_nom||'Sans équipe';
-    if(!byTeam[k]) byTeam[k]=[];
-    byTeam[k].push(j);
+
+  const filterIncomplets=document.getElementById('joueurFilterIncomplets')?.checked;
+
+  // Filter by selected team
+  let joueurs=appData.joueurs.filter(j=>{
+    if(currentJoueurTeam==='__all__') return true;
+    return (j.equipe_nom||'Sans équipe')===currentJoueurTeam;
   });
-  const teamOrder=[...appData.teams,'Sans équipe'];
+
+  // Filter incomplets
+  if(filterIncomplets){
+    joueurs=joueurs.filter(j=>!(j.anecdote||'').trim()||!(j.commentaire||'').trim());
+  }
+
+  joueurs=joueurs.sort((a,b)=>a.nom.localeCompare(b.nom,'fr'));
+
+  if(!joueurs.length){
+    document.getElementById('joueursList').innerHTML=`<div style="font-size:13px;color:var(--ink-muted);padding:8px 0">${filterIncomplets?'Tous les joueurs de cette équipe ont une anecdote et un commentaire ✓':'Aucun joueur dans cette équipe.'}</div>`;
+    return;
+  }
+
   let html='';
-  teamOrder.forEach(t=>{
-    if(!byTeam[t]||!byTeam[t].length) return;
-    html+=`<div style="font-size:12px;font-weight:500;color:var(--gold-dark);margin:10px 0 6px;padding-left:2px">${t}</div>`;
-    byTeam[t].sort((a,b)=>a.nom.localeCompare(b.nom,'fr')).forEach(j=>{
-      html+=`<div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;background:var(--warm-white)">
-        <div class="joueur-row" style="border:none;padding:0 0 8px 0;margin:0">
-          <span class="joueur-nom" style="font-weight:500">${j.nom}</span>
-          <select class="joueur-equipe-select" onchange="updateJoueurEquipe(${j.id},this.value)">
-            <option value="">Sans équipe</option>
-            ${appData.teams.map(t2=>`<option value="${t2}"${t2===j.equipe_nom?' selected':''}>${t2}</option>`).join('')}
-          </select>
-          <button class="joueur-delete" onclick="deleteJoueur(${j.id})" title="Supprimer">✕</button>
-        </div>
-        <div style="margin-bottom:6px">
-          <div style="font-size:11px;font-weight:500;color:var(--ink-muted);margin-bottom:3px;letter-spacing:.3px">ANECDOTE</div>
-          <input type="text" value="${(j.anecdote||'').replace(/"/g,'&quot;')}" placeholder="Ex : A fait le voyage le plus long pour venir..." 
-            onchange="updateJoueurAnecdoteLocal(${j.id},'anecdote',this.value)"
-            style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
-        </div>
-        <div style="margin-bottom:8px">
-          <div style="font-size:11px;font-weight:500;color:var(--ink-muted);margin-bottom:3px;letter-spacing:.3px">COMMENTAIRE <span style="font-weight:400;font-style:italic">(affiché après la réponse)</span></div>
-          <input type="text" value="${(j.commentaire||'').replace(/"/g,'&quot;')}" placeholder="Ex : Il a pris l'avion depuis Tokyo !" 
-            onchange="updateJoueurAnecdoteLocal(${j.id},'commentaire',this.value)"
-            style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
-        </div>
-        <button class="btn btn-sm btn-gold" onclick="saveJoueurAnecdote(${j.id})">💾 Enregistrer</button>
-        <span class="save-msg" id="joueurSaveMsg_${j.id}" style="margin-left:8px">Sauvegardé ✓</span>
-      </div>`;
+  // Group by team only if showing all
+  if(currentJoueurTeam==='__all__'){
+    const byTeam={};
+    joueurs.forEach(j=>{ const k=j.equipe_nom||'Sans équipe'; if(!byTeam[k]) byTeam[k]=[]; byTeam[k].push(j); });
+    const teamOrder=[...appData.teams,'Sans équipe'];
+    teamOrder.forEach(t=>{
+      if(!byTeam[t]?.length) return;
+      html+=`<div style="font-size:12px;font-weight:600;color:var(--gold-dark);margin:14px 0 6px;padding-left:2px;letter-spacing:.3px">${t}</div>`;
+      byTeam[t].forEach(j=>{ html+=renderJoueurCard(j); });
     });
-  });
+  } else {
+    joueurs.forEach(j=>{ html+=renderJoueurCard(j); });
+  }
+
   document.getElementById('joueursList').innerHTML=html;
+}
+
+function renderJoueurCard(j){
+  const incomplete=!(j.anecdote||'').trim()||!(j.commentaire||'').trim();
+  const anecMissing=!(j.anecdote||'').trim();
+  const commMissing=!(j.commentaire||'').trim();
+  const borderColor=incomplete?'var(--danger)':'var(--border)';
+  const bg=incomplete?'#FFF8F8':'var(--warm-white)';
+
+  return`<div style="border:1px solid ${borderColor};border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;background:${bg}">
+    <div class="joueur-row" style="border:none;padding:0 0 8px 0;margin:0">
+      <span class="joueur-nom" style="font-weight:500">${j.nom}</span>
+      ${incomplete?`<span style="font-size:10px;font-weight:600;color:var(--danger);background:#FFE8E8;padding:2px 7px;border-radius:10px">Incomplet</span>`:''}
+      <select class="joueur-equipe-select" onchange="updateJoueurEquipe(${j.id},this.value)">
+        <option value="">Sans équipe</option>
+        ${appData.teams.map(t2=>`<option value="${t2}"${t2===j.equipe_nom?' selected':''}>${t2}</option>`).join('')}
+      </select>
+      <button class="joueur-delete" onclick="deleteJoueur(${j.id})" title="Supprimer">✕</button>
+    </div>
+    <div style="margin-bottom:6px">
+      <div style="font-size:11px;font-weight:500;color:${anecMissing?'var(--danger)':'var(--ink-muted)'};margin-bottom:3px;letter-spacing:.3px">
+        ANECDOTE ${anecMissing?'⚠ manquante':''}
+      </div>
+      <input type="text" value="${(j.anecdote||'').replace(/"/g,'&quot;')}" placeholder="Ex : A fait le voyage le plus long pour venir..."
+        onchange="updateJoueurAnecdoteLocal(${j.id},'anecdote',this.value)"
+        style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid ${anecMissing?'var(--danger)':'var(--border)'};background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
+    </div>
+    <div style="margin-bottom:8px">
+      <div style="font-size:11px;font-weight:500;color:${commMissing?'var(--danger)':'var(--ink-muted)'};margin-bottom:3px;letter-spacing:.3px">
+        COMMENTAIRE ${commMissing?'⚠ manquant':''}<span style="font-weight:400;font-style:italic;color:var(--ink-muted)"> (affiché après la réponse)</span>
+      </div>
+      <input type="text" value="${(j.commentaire||'').replace(/"/g,'&quot;')}" placeholder="Ex : Il a pris l'avion depuis Tokyo !"
+        onchange="updateJoueurAnecdoteLocal(${j.id},'commentaire',this.value)"
+        style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid ${commMissing?'var(--danger)':'var(--border)'};background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
+    </div>
+    <button class="btn btn-sm btn-gold" onclick="saveJoueurAnecdote(${j.id})">💾 Enregistrer</button>
+    <span class="save-msg" id="joueurSaveMsg_${j.id}" style="margin-left:8px">Sauvegardé ✓</span>
+  </div>`;
 }
 function updateJoueurAnecdoteLocal(id,field,val){
   const j=appData.joueurs.find(x=>x.id===id);
