@@ -264,11 +264,10 @@ input[type=file]{display:none}
     <button class="nav-tab active" onclick="adminTab('epreuves',this)">Épreuves</button>
     <button class="nav-tab" onclick="adminTab('equipes',this)">Équipes</button>
     <button class="nav-tab" onclick="adminTab('joueurs',this)">Joueurs</button>
-    <button class="nav-tab" onclick="adminTab('config',this)">Config</button>
+    <button class="nav-tab" onclick="adminTab('config',this)">Codes</button>
     <button class="nav-tab" onclick="adminTab('scores',this)">Scores</button>
     <button class="nav-tab" onclick="adminTab('photos',this)">Photos <span class="notif-badge" id="adminPhotoBadge">0</span></button>
     <button class="nav-tab" onclick="adminTab('archive',this)">Archive</button>
-    <button class="nav-tab" onclick="adminTab('petitbac',this)">Petit Bac</button>
     <button class="nav-tab" onclick="adminTab('classement',this)">Classement</button>
     <button class="nav-tab" onclick="adminTab('reset',this)">Reset</button>
   </div>
@@ -952,7 +951,7 @@ function renderEpEditor(){
     <div class="field"><div class="field-label">Règle de scoring</div><input type="text" class="admin-input" id="epScoring" value="${ep.scoring||''}"></div>
     <div class="field"><div class="field-label">Score maximum</div><input type="number" class="admin-input" id="epMax" value="${ep.max_score||10}" style="width:80px"></div>`;
   if(ep.type==='photos'){
-    h+=`<div class="divider"></div><div class="notice">Épreuve photo automatique.<br>Challenge 1 (Caroline) + Challenge 2 (Marc)<br>1er essai = 10 pts · 2e = 8 pts · 3e = 6 pts · 4e = 4 pts · 5e = 2 pts · Aucun bon = 0 pt<br>Score total : 20 pts max</div>`;
+    h+=`<div class="divider"></div>`;
   }
   if(ep.type==='qcm'){
     h+=`<div class="divider"></div>
@@ -960,22 +959,22 @@ function renderEpEditor(){
       <div style="font-size:14px;font-weight:500">Anecdotes</div>
       <button class="btn btn-sm" onclick="addAnecdote()">+ Ajouter</button>
     </div>
-    <div class="notice" style="font-size:12px">Chaque anecdote vaut 1 point. La réponse doit être "Lui", "Elle" ou "Les 2".</div>
     <div id="anecdotesEditor">${renderAnecdotesEditor()}</div>`;
   }
   if(ep.type==='villes'){
     h+=`<div class="divider"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div style="font-size:14px;font-weight:500">Villes par lettre</div>
-      <button class="btn btn-sm" onclick="initAllLettersAdmin()">Init A→Z</button>
-    </div>
-    <div class="notice" style="font-size:12px">Une ligne par ville. Cliquez "Init A→Z" pour créer les 26 lettres.</div>
+    <div style="font-size:14px;font-weight:500;margin-bottom:10px">Villes par lettre</div>
     <div id="villesBacEditor">${renderVillesBacEditor()}</div>`;
   }
   if(ep.type==='frise'){
-    h+=`<div class="divider"></div><div style="font-size:14px;font-weight:500;margin-bottom:10px">Étapes de la frise</div>`;
-    qs.forEach((q,i)=>{const c=q.contenu||{};h+=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><span style="font-family:'Playfair Display',serif;font-size:16px;color:var(--gold);min-width:22px">${i+1}</span><input type="text" value="${c.evenement||''}" placeholder="Événement..." onchange="updateFriseLocal(${i},'evenement',this.value)" style="flex:2;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px"><input type="text" value="${c.annee||''}" placeholder="Année" onchange="updateFriseLocal(${i},'annee',this.value)" style="width:70px;padding:8px 6px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center"><button class="btn btn-sm" onclick="removeFriseLocal(${i})" style="padding:6px 8px;color:var(--danger);border-color:var(--danger)">✕</button></div>`;});
-    h+=`<button class="btn btn-sm" onclick="addFriseLocal()">+ Ajouter une étape</button>`;
+    h+=`<div class="divider"></div>
+    <div class="notice" style="background:var(--amber-bg);color:var(--amber)">
+      💡 Les anecdotes et commentaires de ce jeu se configurent dans l'onglet 
+      <button onclick="adminTab('joueurs',document.querySelector('[onclick*=joueurs]'))" 
+        style="background:none;border:none;color:var(--gold-dark);font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;padding:0;text-decoration:underline">
+        Joueurs →
+      </button>
+    </div>`;
   }
   h+=`<div class="divider"></div><div style="display:flex;align-items:center;gap:10px">
     <button class="btn btn-gold" onclick="${ep.type==='villes'?'saveVillesBacAndEpreuve()':ep.type==='qcm'?'saveAnecdotesAndEpreuve()':'saveEpreuve()'}">Enregistrer</button>
@@ -1615,55 +1614,91 @@ async function renderAdminArchive(){
   const el=document.getElementById('adminArchiveContent');
   el.innerHTML='<div class="loader-text" style="padding:1rem">Chargement...</div>';
 
-  const [{data:photoArchive},{data:pbArchive},{data:anecArchive}]=await Promise.all([
+  const [{data:photoArchive},{data:pbArchive},{data:scoresArchive}]=await Promise.all([
     db.from('photos_archive').select('*').order('archived_at',{ascending:false}),
     db.from('petit_bac_archive').select('*').order('archived_at',{ascending:false}),
-    db.from('anecdotes_archive').select('*').order('archived_at',{ascending:false})
+    db.from('scores_archive').select('*').order('archived_at',{ascending:false})
   ]);
 
   // Collect all session labels across all tables
   const allLabels=new Set([
     ...(photoArchive||[]).map(r=>r.archive_label),
     ...(pbArchive||[]).map(r=>r.archive_label),
-    ...(anecArchive||[]).map(r=>r.archive_label)
+    ...(scoresArchive||[]).map(r=>r.archive_label)
   ]);
 
   if(!allLabels.size){ el.innerHTML='<div class="notice">Aucune archive disponible. Les données seront archivées lors du prochain reset.</div>'; return; }
 
   let html='';
-  // Sort labels: most recent first (they contain date strings)
   [...allLabels].sort().reverse().forEach(label=>{
     const photos=(photoArchive||[]).filter(r=>r.archive_label===label);
     const pbReps=(pbArchive||[]).filter(r=>r.archive_label===label);
-    const anecReps=(anecArchive||[]).filter(r=>r.archive_label===label);
+    const scoreRows=(scoresArchive||[]).filter(r=>r.archive_label===label);
 
-    html+=`<div style="margin-bottom:24px">
-      <div style="font-size:14px;font-weight:500;color:var(--ink);padding:8px 12px;background:var(--gold-light);border-radius:var(--radius);margin-bottom:12px">📁 ${label}</div>`;
+    html+=`<div style="margin-bottom:32px">
+      <div style="font-size:15px;font-weight:500;color:var(--ink);padding:10px 14px;background:var(--gold-light);border-radius:var(--radius);margin-bottom:14px;display:flex;align-items:center;gap:8px">
+        <span>📁</span><span>${label}</span>
+      </div>`;
 
-    // ---- Subcategory: Photos ----
-    if(photos.length){
-      const byTeam={};
-      photos.forEach(p=>{const k=p.equipe_nom;if(!byTeam[k])byTeam[k]=[];byTeam[k].push(p);});
-      html+=`<div style="margin-bottom:12px">
-        <div style="font-size:12px;font-weight:500;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📸 Défi Photo</div>
-        ${Object.entries(byTeam).map(([team,list])=>`
-          <div style="margin-bottom:10px">
-            <div style="font-size:13px;font-weight:500;margin-bottom:6px">${team}</div>
-            <div class="archive-grid">
-              ${list.map(p=>`<div class="archive-thumb" onclick="openPhotoViewer('${p.data}')">
-                <img src="${p.data}" alt="">
-                <div class="archive-thumb-label">Ch.${p.challenge_num||1} · E${p.attempt_num||'?'} · ${p.statut==='validee'?'+'+p.points+'pts':p.statut}</div>
-              </div>`).join('')}
-            </div>
-          </div>`).join('')}
+    // ---- Classement de la session ----
+    if(scoreRows.length){
+      // Compute totals per team
+      const totals={};
+      scoreRows.forEach(r=>{
+        if(!totals[r.equipe_nom]) totals[r.equipe_nom]=0;
+        totals[r.equipe_nom]+=(r.score||0);
+      });
+      const ranked=Object.entries(totals).sort((a,b)=>b[1]-a[1]);
+      const medals=['🥇','🥈','🥉'];
+      const max=Math.max(...ranked.map(r=>r[1]),1);
+
+      html+=`<div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:500;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">🏆 Classement</div>
+        <div style="background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+          ${ranked.map(([team,total],i)=>`
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)">
+              <span style="font-size:18px;min-width:24px">${medals[i]||i+1}</span>
+              <span style="flex:1;font-size:14px;font-weight:500">${team}</span>
+              <div style="width:50px;background:var(--border);border-radius:4px;height:5px;overflow:hidden"><div style="height:5px;background:var(--gold);width:${Math.round(total/max*100)}%"></div></div>
+              <span style="font-size:13px;font-weight:500;color:var(--gold-dark);min-width:44px;text-align:right">${total} pts</span>
+            </div>`).join('')}
+        </div>
+      </div>`;
+
+      // ---- Détail par épreuve ----
+      const byEp={};
+      scoreRows.forEach(r=>{
+        const k=r.epreuve_titre||('Épreuve '+r.epreuve_id);
+        if(!byEp[k]) byEp[k]={};
+        byEp[k][r.equipe_nom]=r.score||0;
+      });
+      const teams=ranked.map(r=>r[0]);
+
+      html+=`<div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:500;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📊 Scores par épreuve</div>
+        <div style="overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border)">
+          <table style="width:100%;border-collapse:collapse;min-width:280px">
+            <thead><tr style="background:var(--cream)">
+              <th style="padding:8px 12px;font-size:11px;font-weight:500;color:var(--ink-muted);text-align:left;border-bottom:1px solid var(--border)">Épreuve</th>
+              ${teams.map(t=>`<th style="padding:8px 8px;font-size:11px;font-weight:500;color:var(--ink-muted);text-align:center;border-bottom:1px solid var(--border)">${t}</th>`).join('')}
+            </tr></thead>
+            <tbody>
+              ${Object.entries(byEp).map(([ep,scores])=>`
+                <tr>
+                  <td style="padding:8px 12px;font-size:12px;border-bottom:1px solid var(--border)">${ep}</td>
+                  ${teams.map(t=>`<td style="padding:8px;text-align:center;font-size:13px;font-weight:500;border-bottom:1px solid var(--border);color:var(--gold-dark)">${scores[t]!=null?scores[t]+'pts':'—'}</td>`).join('')}
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
       </div>`;
     }
 
-    // ---- Subcategory: Petit Bac ----
+    // ---- Petit Bac ----
     if(pbReps.length){
       const byTeam={};
       pbReps.forEach(r=>{if(!byTeam[r.equipe_nom])byTeam[r.equipe_nom]={};byTeam[r.equipe_nom][r.lettre]=r.ville_donnee;});
-      html+=`<div style="margin-bottom:12px">
+      html+=`<div style="margin-bottom:14px">
         <div style="font-size:12px;font-weight:500;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">🏙 Petit Bac des Villes</div>
         ${Object.entries(byTeam).map(([team,lettres])=>`
           <div class="card" style="margin-bottom:8px">
@@ -1675,19 +1710,22 @@ async function renderAdminArchive(){
       </div>`;
     }
 
-    // ---- Subcategory: Anecdotes ----
-    if(anecReps.length){
+    // ---- Photos ----
+    if(photos.length){
       const byTeam={};
-      anecReps.forEach(r=>{if(!byTeam[r.equipe_nom])byTeam[r.equipe_nom]=r;});
-      html+=`<div style="margin-bottom:12px">
-        <div style="font-size:12px;font-weight:500;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">🎭 Celui qui…</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-          ${Object.entries(byTeam).map(([team,r])=>`
-            <div class="card" style="text-align:center;padding:10px">
-              <div style="font-size:13px;font-weight:500">${team}</div>
-              <div style="font-size:22px;font-weight:500;font-family:'Playfair Display',serif;color:var(--gold-dark)">${r.reponse_correcte}</div>
-            </div>`).join('')}
-        </div>
+      photos.forEach(p=>{const k=p.equipe_nom;if(!byTeam[k])byTeam[k]=[];byTeam[k].push(p);});
+      html+=`<div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:500;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📸 Défi Photo</div>
+        ${Object.entries(byTeam).map(([team,list])=>`
+          <div style="margin-bottom:10px">
+            <div style="font-size:13px;font-weight:500;margin-bottom:6px">${team}</div>
+            <div class="archive-grid">
+              ${list.map(p=>`<div class="archive-thumb" onclick="openPhotoViewer('${p.data}')">
+                <img src="${p.data}" alt="">
+                <div class="archive-thumb-label">Ch.${p.challenge_num||1} · E${p.attempt_num||'?'} · ${p.statut==='validee'?'+'+p.points+'pts':p.statut}</div>
+              </div>`).join('')}
+            </div>
+          </div>`).join('')}
       </div>`;
     }
 
@@ -1732,10 +1770,22 @@ async function confirmReset(){
     })));
   }
 
-  // 3. Archive anecdotes responses (from scores + locked state we reconstruct per team)
-  // We archive the scores table snapshot for anecdotes
+  // 3. Archive ALL scores (toutes les épreuves) + classement
   const {data:scores}=await db.from('scores').select('*');
   if(scores?.length){
+    await db.from('scores_archive').insert(scores.map(s=>{
+      const ep=appData.epreuves.find(e=>e.id===s.epreuve_id);
+      return {
+        equipe_nom:s.equipe_nom,
+        epreuve_id:s.epreuve_id,
+        epreuve_titre:ep?ep.title:'Épreuve '+s.epreuve_id,
+        score:s.score||0,
+        archive_label:label,
+        archived_at:now
+      };
+    }));
+
+    // Also keep anecdotes_archive for backward compat
     const anecEp=appData.epreuves.find(e=>e.type==='qcm');
     if(anecEp){
       const anecScores=scores.filter(s=>s.epreuve_id===anecEp.id);
