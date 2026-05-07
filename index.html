@@ -304,7 +304,13 @@ input[type=file]{display:none}
   </div>
   <div id="aScores" class="page"><div class="stat-grid" id="adminStatGrid"></div><div class="score-table-wrap" id="adminScoreTable"></div></div>
   <div id="aPhotos" class="page"><div id="adminPhotosContent"></div></div>
-  <div id="aArchive" class="page"><div id="adminArchiveContent"></div></div>
+  <div id="aArchive" class="page">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-size:15px;font-weight:500">Archives</div>
+      <button class="btn btn-sm btn-danger" onclick="openPurgeModal()">🗑 Supprimer les archives</button>
+    </div>
+    <div id="adminArchiveContent"></div>
+  </div>
   <div id="aPetitBac" class="page"><div id="adminPetitBacContent"></div></div>
   <div id="aClassement" class="page"><div id="adminLeaderboard"></div><button class="btn btn-sm" style="margin-top:1rem" onclick="renderLeaderboard('adminLeaderboard')">Actualiser</button></div>
   <div id="aReset" class="page">
@@ -392,6 +398,16 @@ input[type=file]{display:none}
     <div class="modal-btns">
       <button class="btn btn-sm" onclick="closeResetModal()">Annuler</button>
       <button class="btn btn-sm btn-danger" onclick="confirmReset()">Confirmer</button>
+    </div>
+  </div>
+</div>
+<div class="modal-backdrop" id="purgeModal">
+  <div class="modal">
+    <div class="modal-title">🗑 Supprimer les archives</div>
+    <div class="modal-desc">Cette action est <strong>irréversible</strong>. Toutes les photos archivées, scores, réponses aux jeux et résultats seront définitivement supprimés.</div>
+    <div class="modal-btns">
+      <button class="btn btn-sm" onclick="closePurgeModal()">Annuler</button>
+      <button class="btn btn-sm btn-danger" onclick="confirmPurge()">Tout supprimer</button>
     </div>
   </div>
 </div>
@@ -1867,6 +1883,23 @@ function renderLeaderboard(containerId){
 // ===================== RESET =====================
 function openResetModal(){document.getElementById('resetModal').classList.add('open');}
 function closeResetModal(){document.getElementById('resetModal').classList.remove('open');}
+
+function openPurgeModal(){document.getElementById('purgeModal').classList.add('open');}
+function closePurgeModal(){document.getElementById('purgeModal').classList.remove('open');}
+async function confirmPurge(){
+  closePurgeModal();
+  const el=document.getElementById('adminArchiveContent');
+  el.innerHTML='<div class="loader-text" style="padding:1rem">Suppression en cours…</div>';
+  await Promise.all([
+    db.from('photos_archive').delete().neq('id',0),
+    db.from('petit_bac_archive').delete().neq('id',0),
+    db.from('scores_archive').delete().neq('id',0),
+    db.from('reponses_detail_archive').delete().neq('id',0),
+    db.from('anecdotes_archive').delete().neq('id',0)
+  ]);
+  showToast({icon:'🗑',title:'Archives supprimées',msg:'Toutes les archives ont été effacées.',type:'danger',duration:4000});
+  renderAdminArchive();
+}
 async function confirmReset(){
   const label=document.getElementById('archiveLabel').value||`Reset du ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`;
   const now=new Date().toISOString();
