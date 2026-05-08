@@ -1004,7 +1004,7 @@ function renderJoueurCard(j){
       </div>
       <textarea class="joueur-comm-input" placeholder="Ex : Il a pris l'avion depuis Tokyo !"
         oninput="updateJoueurAnecdoteLocal(${j.id},'commentaire',this.value)"
-        style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid ${commMissing&&state==='red'?'var(--danger)':'var(--border)'};background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;min-height:48px;resize:vertical;transition:border-color .2s;line-height:1.5">${(j.commentaire||'').replace(/</g,'&lt;')}</textarea>
+        style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid ${commMissing&&state==='red'?'var(--danger)':'var(--border)'};background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;min-height:100px;resize:vertical;transition:border-color .2s;line-height:1.5">${(j.commentaire||'').replace(/</g,'&lt;')}</textarea>
     </div>
     <button class="btn btn-sm btn-gold" onclick="saveJoueurAnecdote(${j.id})">💾 Enregistrer</button>
     <span class="save-msg" id="joueurSaveMsg_${j.id}" style="margin-left:8px">Sauvegardé ✓</span>
