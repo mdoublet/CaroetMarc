@@ -166,7 +166,7 @@ input[type=file]{display:none}
 
 /* PIN CONFIG */
 .pin-config-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-.pin-config-label{font-size:13px;color:var(--ink-soft);min-width:140px;flex-shrink:0}
+.pin-config-label{font-size:13px;color:var(--ink-soft);min-width:200px;flex-shrink:0}
 .pin-config-input{width:100px;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:15px;text-align:center;letter-spacing:3px}
 
 /* GM BANNER */
@@ -994,17 +994,17 @@ function renderJoueurCard(j){
       <div class="joueur-anec-label" style="font-size:11px;font-weight:500;color:${anecMissing&&state==='red'?'var(--danger)':'var(--ink-muted)'};margin-bottom:3px;letter-spacing:.3px">
         ANECDOTE<span class="joueur-field-warn">${anecMissing&&state==='red'?' ⚠ manquante':''}</span>
       </div>
-      <input type="text" class="joueur-anec-input" value="${(j.anecdote||'').replace(/"/g,'&quot;')}" placeholder="Ex : A fait le voyage le plus long pour venir..."
+      <textarea class="joueur-anec-input" placeholder="Ex : A fait le voyage le plus long pour venir..."
         oninput="updateJoueurAnecdoteLocal(${j.id},'anecdote',this.value)"
-        style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid ${anecMissing&&state==='red'?'var(--danger)':'var(--border)'};background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;transition:border-color .2s">
+        style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid ${anecMissing&&state==='red'?'var(--danger)':'var(--border)'};background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;min-height:64px;resize:vertical;transition:border-color .2s;line-height:1.5">${(j.anecdote||'').replace(/</g,'&lt;')}</textarea>
     </div>
     <div style="margin-bottom:8px">
       <div class="joueur-comm-label" style="font-size:11px;font-weight:500;color:${commMissing&&state==='red'?'var(--danger)':'var(--ink-muted)'};margin-bottom:3px;letter-spacing:.3px">
         COMMENTAIRE<span class="joueur-field-warn">${commMissing&&state==='red'?' ⚠ manquant':''}</span><span style="font-weight:400;font-style:italic;color:var(--ink-muted)"> (affiché après la réponse)</span>
       </div>
-      <input type="text" class="joueur-comm-input" value="${(j.commentaire||'').replace(/"/g,'&quot;')}" placeholder="Ex : Il a pris l'avion depuis Tokyo !"
+      <textarea class="joueur-comm-input" placeholder="Ex : Il a pris l'avion depuis Tokyo !"
         oninput="updateJoueurAnecdoteLocal(${j.id},'commentaire',this.value)"
-        style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid ${commMissing&&state==='red'?'var(--danger)':'var(--border)'};background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;transition:border-color .2s">
+        style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid ${commMissing&&state==='red'?'var(--danger)':'var(--border)'};background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;min-height:48px;resize:vertical;transition:border-color .2s;line-height:1.5">${(j.commentaire||'').replace(/</g,'&lt;')}</textarea>
     </div>
     <button class="btn btn-sm btn-gold" onclick="saveJoueurAnecdote(${j.id})">💾 Enregistrer</button>
     <span class="save-msg" id="joueurSaveMsg_${j.id}" style="margin-left:8px">Sauvegardé ✓</span>
