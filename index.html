@@ -3,19 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>Marc & Caroline — Chasse au trésor</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<title>Caroline & Marc — Chasse au trésor</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500&family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
-  --cream:#FAF8F3;--warm-white:#FFFEF9;
-  --gold:#B8975A;--gold-light:#E8D9B8;--gold-dark:#8A6E3A;
-  --ink:#1C1A17;--ink-soft:#4A4640;--ink-muted:#8A857D;
-  --border:#E0D9CC;--border-strong:#C8BFA8;
-  --success-bg:#EDF5E8;--success:#3A7C2A;
+  --cream:#EEF4F7;--warm-white:#F5F9FB;
+  --gold:#1E6A7A;--gold-light:#C8DFE5;--gold-dark:#134D5A;
+  --ink:#0D2B33;--ink-soft:#2A4F5A;--ink-muted:#5A7D87;
+  --border:#B8D0D8;--border-strong:#7AAAB8;
+  --success-bg:#E6F4EC;--success:#1E7A45;
   --danger-bg:#FCEAEA;--danger:#A32020;
-  --info-bg:#EAF0F8;--info:#1A4A8A;
-  --amber-bg:#FBF3E0;--amber:#8A5E0A;
+  --info-bg:#E5F0F5;--info:#134D5A;
+  --amber-bg:#E8F2F5;--amber:#1E6A7A;
   --radius:12px;--radius-sm:8px;--radius-pill:24px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -42,8 +42,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--ink);m
 .points-pop{position:fixed;font-size:24px;font-weight:500;color:var(--gold-dark);font-family:'Playfair Display',serif;pointer-events:none;animation:pointsPop 1.6s ease forwards;z-index:300}
 
 /* LOGIN */
-.login-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1.5rem;text-align:center}
-.monogram{width:72px;height:72px;border-radius:50%;background:var(--gold-light);border:1.5px solid var(--gold);display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-size:22px;color:var(--gold-dark);margin:0 auto 1.5rem;letter-spacing:2px}
+.login-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1.5rem;text-align:center;
+  background:linear-gradient(160deg, #EEF4F7 0%, #D6EBF2 40%, #EEF4F7 100%);}
+.login-wrap::before{content:'';position:fixed;inset:0;pointer-events:none;opacity:.06;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='20'%3E%3Cpath d='M0 10 Q25 0 50 10 Q75 20 100 10' stroke='%231E6A7A' stroke-width='2' fill='none'/%3E%3C/svg%3E");
+  background-repeat:repeat;background-size:100px 20px;}
+.monogram{width:80px;height:80px;border-radius:50%;background:var(--gold-light);border:2px solid var(--gold);display:flex;align-items:center;justify-content:center;color:var(--gold-dark);margin:0 auto 1.5rem}
 .login-title{font-size:26px;font-weight:400;margin-bottom:4px}
 .login-sub{font-size:13px;color:var(--ink-muted);margin-bottom:2.5rem;letter-spacing:.5px}
 .role-cards{display:flex;flex-direction:column;gap:10px;width:100%;margin-bottom:2rem}
@@ -225,9 +229,18 @@ input[type=file]{display:none}
 <!-- LOGIN -->
 <div id="loginScreen" style="display:none">
   <div class="login-wrap">
-    <div class="monogram">M&C</div>
-    <h1 class="login-title">Marc & Caroline</h1>
-    <p class="login-sub">Chasse au trésor · 5 septembre 2025<br>Villa 180 Mer · L'Houmeau</p>
+    <div class="monogram">
+      <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="19" cy="8" r="4" stroke="currentColor" stroke-width="2" fill="none"/>
+        <line x1="19" y1="12" x2="19" y2="32" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M9 20 Q9 32 19 32 Q29 32 29 20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <line x1="13" y1="12" x2="25" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <line x1="9" y1="28" x2="5" y2="24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="29" y1="28" x2="33" y2="24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <h1 class="login-title"><span style="font-family:'Dancing Script',cursive;font-size:32px;font-weight:600">Caroline & Marc</span></h1>
+    <p class="login-sub">Chasse au trésor · 5 septembre 2026<br>Villa 180° Mer · L'Houmeau</p>
     <div class="role-cards">
       <div class="role-card" id="roleAdmin" onclick="selectRole('admin')">
         <div class="role-icon">⚙️</div>
@@ -256,7 +269,7 @@ input[type=file]{display:none}
   <div class="app-header">
     <div>
       <div class="app-header-title">Administration <span class="sync-indicator"><span class="sync-dot"></span>Live</span></div>
-      <div class="app-header-sub">Marc & Caroline · 5 sept. 2025</div>
+      <div class="app-header-sub">Caroline & Marc · 5 sept. 2026</div>
     </div>
     <button class="logout-btn" onclick="logout()">Quitter</button>
   </div>
@@ -339,7 +352,7 @@ input[type=file]{display:none}
   <div class="app-header">
     <div>
       <div class="app-header-title" id="gmHeaderTitle">Game Master</div>
-      <div class="app-header-sub">Marc & Caroline · 5 sept. 2025</div>
+      <div class="app-header-sub">Caroline & Marc · 5 sept. 2026</div>
     </div>
     <button class="logout-btn" onclick="logout()">Quitter</button>
   </div>
@@ -391,8 +404,8 @@ input[type=file]{display:none}
 <!-- MODE JOUEUR -->
 <div id="playerApp" style="display:none">
   <div class="player-app-header">
-    <div class="player-title">Marc & Caroline</div>
-    <div class="player-sub">Chasse au trésor · 5 septembre 2025</div>
+    <div class="player-title" style="font-family:'Dancing Script',cursive;font-size:24px;font-weight:600">Caroline & Marc</div>
+    <div class="player-sub">Chasse au trésor · 5 septembre 2026</div>
   </div>
   <div style="padding:16px">
     <div style="font-size:13px;color:var(--ink-muted);margin-bottom:16px;text-align:center">Participants par équipe</div>
@@ -1819,8 +1832,8 @@ function renderAnecdotesEditor(){
         <span style="font-size:12px;font-weight:500;color:var(--gold-dark)">Celui qui…</span>
         <button class="btn btn-sm btn-danger" style="margin-left:auto;padding:3px 10px;font-size:11px" onclick="deleteAnecdote(${i})">Supprimer</button>
       </div>
-      <input type="text" value="${(a.celui_qui||'').replace(/"/g,'&quot;')}" placeholder="A fait le premier pas..." onchange="updateAnecdote(${i},'celui_qui',this.value)"
-        style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:14px;margin-bottom:8px">
+      <textarea placeholder="A fait le premier pas..." oninput="updateAnecdote(${i},'celui_qui',this.value)"
+        style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:14px;margin-bottom:8px;min-height:64px;resize:vertical;line-height:1.5">${(a.celui_qui||'').replace(/</g,'&lt;')}</textarea>
       <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
         <span style="font-size:12px;color:var(--ink-muted);flex-shrink:0">Réponse :</span>
         ${['Lui','Elle','Les 2'].map(r=>`<button onclick="updateAnecdote(${i},'reponse','${r}');document.getElementById('anecdotesEditor').innerHTML=renderAnecdotesEditor()"
@@ -1828,8 +1841,8 @@ function renderAnecdotesEditor(){
           background:${a.reponse===r?'var(--gold-light)':'transparent'};color:${a.reponse===r?'var(--gold-dark)':'var(--ink)'};
           font-family:'DM Sans',sans-serif;font-size:13px;font-weight:${a.reponse===r?'500':'400'};cursor:pointer">${r}</button>`).join('')}
       </div>
-      <input type="text" value="${(a.commentaire||'').replace(/"/g,'&quot;')}" placeholder="Commentaire optionnel affiché si mauvaise réponse..." onchange="updateAnecdote(${i},'commentaire',this.value)"
-        style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
+      <textarea placeholder="Commentaire optionnel affiché si mauvaise réponse..." oninput="updateAnecdote(${i},'commentaire',this.value)"
+        style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;min-height:100px;resize:vertical;line-height:1.5">${(a.commentaire||'').replace(/</g,'&lt;')}</textarea>
     </div>`).join('');
 }
 
@@ -1842,7 +1855,7 @@ function addAnecdote(){
   if(card) setTimeout(()=>card.scrollIntoView({behavior:'smooth',block:'center'}),50);
   // Focus the text field
   if(card){
-    const input=card.querySelector('input[type="text"]');
+    const input=card.querySelector('textarea');
     if(input) setTimeout(()=>input.focus(),100);
   }
 }
