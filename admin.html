@@ -645,9 +645,13 @@ async function init(){
     await loadChallengeState();
   }catch(e){console.error('Init error:',e);}
 
-  // Init jeu de piste (erreurs isolées pour ne pas bloquer le loader)
-  try { await jdpInit(); } catch(e) { console.error('jdpInit error:', e); }
+  console.log('✅ init() principal terminé');
 
+  // Init jeu de piste (erreurs isolées pour ne pas bloquer le loader)
+  console.log('⏳ jdpInit() start');
+  try { await jdpInit(); console.log('✅ jdpInit() done'); } catch(e) { console.error('jdpInit error:', e); }
+
+  console.log('✅ Cache loader');
   document.getElementById('globalLoader').style.display='none';
   // Safety: always hide loader after 8s max
   setTimeout(()=>{
@@ -2911,11 +2915,13 @@ async function jdpSaveLieux() {
 }
 
 async function jdpInit() {
+  console.log('⏳ jdpInit: chargement jp_config + jp_team_states');
   const [config, tsList] = await Promise.all([
-    (async()=>{ const {data}=await db.from('jp_config').select('*'); return data||[]; })(),
-    (async()=>{ const {data}=await db.from('jp_team_states').select('*'); return data||[]; })()
+    (async()=>{ try{ const {data}=await db.from('jp_config').select('*'); console.log('✅ jp_config:', (data||[]).length, 'rows'); return data||[]; }catch(e){console.error('jp_config error',e);return[];} })(),
+    (async()=>{ try{ const {data}=await db.from('jp_team_states').select('*'); console.log('✅ jp_team_states:', (data||[]).length, 'rows'); return data||[]; }catch(e){console.error('jp_team_states error',e);return[];} })()
   ]);
-  try { const r=await db.from('jp_game_state').select('*').eq('id',1).single(); if(r.data) jdpData.gameState=r.data; } catch(e){}
+  console.log('⏳ jdpInit: jp_game_state');
+  try { const r=await db.from('jp_game_state').select('*').eq('id',1).single(); console.log('✅ jp_game_state:', r.data); if(r.data) jdpData.gameState=r.data; } catch(e){ console.warn('jp_game_state absent (normal si pas encore créé)'); }
   jdpData.config={};
   config.forEach(r=>{ jdpData.config[r.key]=r.value; });
   if(jdpData.config.jdp_score_depart) jdpData.scoring.score_depart=parseInt(jdpData.config.jdp_score_depart);
