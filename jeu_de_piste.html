@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Caroline & Marc — Jeu de Piste</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500&family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --cream:#EEF4F7;--warm-white:#F5F9FB;
+  --gold:#1E6A7A;--gold-light:#C8DFE5;--gold-dark:#134D5A;
+  --ink:#0D2B33;--ink-soft:#2A4F5A;--ink-muted:#5A7D87;
+  --border:#B8D0D8;--border-strong:#7AAAB8;
+  --success-bg:#E6F4EC;--success:#1E7A45;
+  --danger-bg:#FCEAEA;--danger:#A32020;
+  --info-bg:#E5F0F5;--info:#134D5A;
+  --amber-bg:#E8F2F5;--amber:#1E6A7A;
+  --radius:12px;--radius-sm:8px;--radius-pill:24px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{background:var(--cream)}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--ink);min-height:100vh;max-width:480px;margin:0 auto;padding-bottom:3rem}
+
+/* LOADER */
+#globalLoader{position:fixed;inset:0;background:var(--cream);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:16px}
+.loader-ring{width:40px;height:40px;border:3px solid var(--gold-light);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loader-text{font-size:13px;color:var(--ink-muted)}
+
+/* TOASTS */
+#toastContainer{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:500;display:flex;flex-direction:column;gap:8px;width:calc(100% - 32px);max-width:420px;pointer-events:none}
+.toast{background:var(--ink);color:white;border-radius:var(--radius);padding:12px 16px;font-size:13px;display:flex;align-items:flex-start;gap:10px;pointer-events:all;animation:slideDown .3s ease;box-shadow:0 4px 20px rgba(0,0,0,.25)}
+.toast.success{background:#2A5C1E}.toast.danger{background:#8A1A1A}.toast.gold{background:var(--gold-dark)}
+@keyframes slideDown{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
+.toast-icon{font-size:18px;flex-shrink:0;margin-top:1px}
+.toast-body{flex:1}
+.toast-title{font-weight:500;margin-bottom:2px}
+.toast-msg{font-size:12px;opacity:.85}
+
+/* LOGIN */
+.login-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1.5rem;text-align:center;
+  background:linear-gradient(160deg,#EEF4F7 0%,#D6EBF2 40%,#EEF4F7 100%);}
+.login-wrap::before{content:'';position:fixed;inset:0;pointer-events:none;opacity:.06;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='20'%3E%3Cpath d='M0 10 Q25 0 50 10 Q75 20 100 10' stroke='%231E6A7A' stroke-width='2' fill='none'/%3E%3C/svg%3E");
+  background-repeat:repeat;background-size:100px 20px;}
+.monogram{width:80px;height:80px;border-radius:50%;background:var(--gold-light);border:2px solid var(--gold);display:flex;align-items:center;justify-content:center;color:var(--gold-dark);margin:0 auto 1.5rem}
+.login-title{font-size:26px;font-weight:400;margin-bottom:4px}
+.login-sub{font-size:13px;color:var(--ink-muted);margin-bottom:2.5rem;letter-spacing:.5px}
+.role-cards{display:flex;flex-direction:column;gap:10px;width:100%;margin-bottom:2rem}
+.role-card{background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.25rem;text-align:left;cursor:pointer;display:flex;align-items:center;gap:14px;transition:border-color .15s}
+.role-card.selected{border-color:var(--gold);background:var(--amber-bg)}
+.role-icon{width:40px;height:40px;border-radius:50%;background:var(--gold-light);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.role-card.selected .role-icon{background:var(--gold)}
+.role-card-title{font-size:14px;font-weight:500}
+.role-card.selected .role-card-title{color:var(--gold-dark)}
+.role-card-desc{font-size:12px;color:var(--ink-muted);margin-top:2px}
+.field-label{font-size:12px;color:var(--ink-muted);margin-bottom:5px;font-weight:500;letter-spacing:.3px}
+select,input[type=text],input[type=password],input[type=number]{width:100%;padding:11px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:15px;-webkit-appearance:none;appearance:none}
+select:focus,input:focus{outline:none;border-color:var(--gold)}
+.pin-input{letter-spacing:6px;font-size:20px;text-align:center}
+.field{margin-bottom:14px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 20px;border-radius:var(--radius-pill);border:1px solid var(--border-strong);background:transparent;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;color:var(--ink);transition:background .12s,transform .1s}
+.btn:active{transform:scale(.97)}
+.btn-gold{background:var(--gold);color:white;border-color:var(--gold-dark)}
+.btn-gold:hover{background:var(--gold-dark)}
+.btn-danger{color:var(--danger);border-color:var(--danger)}
+.btn-full{width:100%}.btn-sm{padding:7px 14px;font-size:13px}
+.err-msg{font-size:12px;color:var(--danger);margin-top:6px}
+
+/* APP SHELL */
+.app-header{background:var(--warm-white);border-bottom:1px solid var(--border);padding:14px 16px 10px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10}
+.app-header-title{font-size:15px;font-weight:500}
+.app-header-sub{font-size:11px;color:var(--ink-muted)}
+.logout-btn{font-size:12px;color:var(--ink-muted);background:none;border:none;cursor:pointer;padding:4px 8px;margin-left:auto}
+.nav-tabs{display:flex;overflow-x:auto;background:var(--warm-white);border-bottom:1px solid var(--border);padding:0 8px;scrollbar-width:none}
+.nav-tabs::-webkit-scrollbar{display:none}
+.nav-tab{flex-shrink:0;padding:11px 12px;font-size:13px;color:var(--ink-muted);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s,border-color .15s}
+.nav-tab.active{color:var(--gold-dark);border-bottom-color:var(--gold);font-weight:500}
+.page{display:none;padding:16px}.page.active{display:block}
+.card{background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.1rem;margin-bottom:12px}
+.card-title{font-size:15px;font-weight:500;margin-bottom:8px}
+.divider{border:none;border-top:1px solid var(--border);margin:10px 0}
+.badge{display:inline-block;font-size:11px;font-weight:500;padding:3px 10px;border-radius:var(--radius-pill)}
+.badge-gold{background:var(--gold-light);color:var(--gold-dark)}
+.notice{background:var(--info-bg);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;color:var(--info);margin-bottom:12px;line-height:1.5}
+.warn{background:var(--amber-bg);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;color:var(--amber);margin-bottom:12px;line-height:1.5}
+.sync-indicator{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--success)}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:var(--success);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.team-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.team-btn{padding:10px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;color:var(--ink);cursor:pointer;text-align:center;transition:all .12s}
+.team-btn.selected{border-color:var(--gold);background:var(--amber-bg);color:var(--gold-dark)}
+.lb-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.lb-rank{font-size:18px;font-weight:500;min-width:28px;color:var(--ink-muted);font-family:'Playfair Display',serif}
+.lb-rank.gold{color:#B8820A}.lb-rank.silver{color:#808080}.lb-rank.bronze{color:#A0501A}
+.lb-name{flex:1;font-size:14px;font-weight:500}
+.lb-bar-wrap{width:60px;background:var(--border);border-radius:4px;height:6px;overflow:hidden}
+.lb-bar{height:100%;border-radius:4px;background:var(--gold)}
+.lb-pts{font-size:13px;font-weight:500;min-width:44px;text-align:right;color:var(--gold-dark)}
+.modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center;padding:1.5rem}
+.modal-backdrop.open{display:flex}
+.modal{background:var(--warm-white);border-radius:var(--radius);padding:1.5rem;width:100%;max-width:340px;text-align:center}
+.modal-title{font-size:17px;font-weight:500;margin-bottom:8px;font-family:'Playfair Display',serif}
+.modal-desc{font-size:13px;color:var(--ink-muted);margin-bottom:1.25rem;line-height:1.5}
+.modal-btns{display:flex;gap:8px;justify-content:center}
+
+/* TEAM INTERFACE */
+.enigme-card{background:var(--warm-white);border:2px solid var(--gold);border-radius:var(--radius);padding:1.25rem;margin-bottom:14px;position:relative}
+.enigme-text{font-size:16px;font-style:italic;color:var(--ink);line-height:1.7;font-family:'Playfair Display',serif}
+.indice-card{background:var(--amber-bg);border:1px solid var(--gold-light);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:8px}
+.indice-num{font-size:11px;font-weight:500;color:var(--gold-dark);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.indice-text{font-size:14px;font-style:italic;color:var(--ink-soft);line-height:1.6}
+.score-display{text-align:center;padding:16px 0}
+.score-big{font-size:56px;font-weight:400;font-family:'Playfair Display',serif;color:var(--gold-dark);line-height:1}
+.score-sub{font-size:13px;color:var(--ink-muted);margin-top:4px}
+.timer-bar-wrap{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:12px}
+.timer-bar{height:100%;border-radius:3px;background:var(--success);transition:width .5s linear,background .5s}
+.timer-bar.warn{background:var(--amber)}
+.timer-bar.danger{background:var(--danger)}
+.timer-label{font-size:12px;color:var(--ink-muted);text-align:right;margin-bottom:4px}
+.status-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:var(--radius-pill);font-size:13px;font-weight:500}
+.status-pill.waiting{background:var(--amber-bg);color:var(--amber)}
+.status-pill.go-north{background:#E3F4E8;color:#1A6B35}
+.status-pill.go-south{background:#FEF3C7;color:#92400E}
+.status-pill.active{background:var(--info-bg);color:var(--info)}
+.status-pill.done{background:var(--success-bg);color:var(--success)}
+.code-input-wrap{display:flex;gap:8px;align-items:center}
+.code-input{flex:1;padding:12px 14px;border-radius:var(--radius-sm);border:2px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:20px;text-align:center;letter-spacing:6px;font-weight:500}
+.code-input:focus{outline:none;border-color:var(--gold)}
+.step-progress{display:flex;gap:6px;align-items:center;margin-bottom:16px}
+.step-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;border:2px solid var(--border);color:var(--ink-muted);background:var(--cream)}
+.step-dot.active{border-color:var(--gold);background:var(--gold);color:white}
+.step-dot.done{border-color:var(--success);background:var(--success-bg);color:var(--success)}
+.step-line{flex:1;height:2px;background:var(--border);border-radius:1px}
+.step-line.done{background:var(--success)}
+.epreuve-banner{background:var(--gold-light);border:1px solid var(--gold);border-radius:var(--radius);padding:14px;text-align:center;margin-bottom:14px}
+.epreuve-banner-title{font-size:17px;font-weight:500;font-family:'Playfair Display',serif;color:var(--gold-dark)}
+.epreuve-banner-sub{font-size:12px;color:var(--ink-muted);margin-top:4px}
+.phase-tag{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;padding:3px 10px;border-radius:var(--radius-pill);display:inline-block;margin-bottom:10px}
+.phase-tag.enigme{background:var(--gold-light);color:var(--gold-dark)}
+.phase-tag.marche{background:#E3F4E8;color:#1A6B35}
+.phase-tag.galet{background:#FEF3C7;color:#92400E}
+.phase-tag.epreuve{background:var(--info-bg);color:var(--info)}
+.phase-tag.termine{background:var(--success-bg);color:var(--success)}
+
+/* ADMIN SPECIFIC */
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px}
+.stat-card{background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;text-align:center}
+.stat-val{font-size:22px;font-weight:500;font-family:'Playfair Display',serif}
+.stat-lbl{font-size:11px;color:var(--ink-muted);margin-top:2px}
+.equipe-row{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px}
+.equipe-status-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.dot-waiting{background:var(--ink-muted)}
+.dot-active{background:var(--amber);animation:pulse 1.5s infinite}
+.dot-done{background:var(--success)}
+.progress-mini{font-size:12px;color:var(--ink-muted)}
+.action-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+</style>
+</head>
+<body>
+<div id="toastContainer"></div>
+<div id="globalLoader"><div class="loader-ring"></div><div class="loader-text">Connexion en cours...</div></div>
+
+<!-- LOGIN -->
+<div id="loginScreen" style="display:none">
+  <div class="login-wrap">
+    <div class="monogram">
+      <svg width="38" height="38" viewBox="0 0 38 38" fill="none">
+        <circle cx="19" cy="8" r="4" stroke="currentColor" stroke-width="2" fill="none"/>
+        <line x1="19" y1="12" x2="19" y2="32" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M9 20 Q9 32 19 32 Q29 32 29 20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <line x1="13" y1="12" x2="25" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <h1 class="login-title"><span style="font-family:'Dancing Script',cursive;font-size:32px;font-weight:600">Caroline & Marc</span></h1>
+    <p class="login-sub">Jeu de piste · 5 septembre 2026<br>Villa 180° Mer · L'Houmeau</p>
+    <div class="role-cards">
+      <div class="role-card" id="roleAdmin" onclick="selectRole('admin')">
+        <div class="role-icon">⚙️</div>
+        <div><div class="role-card-title">Administrateur</div><div class="role-card-desc">Démarrer le jeu, suivre les équipes</div></div>
+      </div>
+      <div class="role-card" id="roleGM" onclick="selectRole('gm')">
+        <div class="role-icon">🎯</div>
+        <div><div class="role-card-title">Game Master</div><div class="role-card-desc">Gérer une épreuve sur le terrain</div></div>
+      </div>
+      <div class="role-card" id="roleTeam" onclick="selectRole('team')">
+        <div class="role-icon">🧭</div>
+        <div><div class="role-card-title">Équipe</div><div class="role-card-desc">Jouer le jeu de piste</div></div>
+      </div>
+    </div>
+    <div class="field" style="width:100%">
+      <div class="field-label">Code PIN</div>
+      <input type="password" id="pinInput" class="pin-input" placeholder="••••" maxlength="8" inputmode="numeric" onkeydown="if(event.key==='Enter') doLogin()">
+    </div>
+    <button class="btn btn-gold btn-full" onclick="doLogin()">Entrer</button>
+    <div class="err-msg" id="loginErr" style="display:none">PIN incorrect</div>
+  </div>
+</div>
+
+<!-- ADMIN APP -->
+<div id="adminApp" style="display:none">
+  <div class="app-header">
+    <div>
+      <div class="app-header-title">Administration <span class="sync-indicator"><span class="sync-dot"></span>Live</span></div>
+      <div class="app-header-sub">Jeu de piste · Caroline & Marc</div>
+    </div>
+    <button class="logout-btn" onclick="logout()">Quitter</button>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="adminTab('control',this)">🎮 Contrôle</button>
+    <button class="nav-tab" onclick="adminTab('suivi',this)">📍 Suivi</button>
+    <button class="nav-tab" onclick="adminTab('scores',this)">🏆 Scores</button>
+    <button class="nav-tab" onclick="adminTab('config',this)">⚙️ Config</button>
+  </div>
+
+  <!-- Contrôle -->
+  <div id="aControl" class="page active">
+    <div class="card">
+      <div class="card-title">État du jeu</div>
+      <div id="adminGameStatus"></div>
+      <div class="action-row" id="adminGameActions"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Équipes</div>
+      <div id="adminTeamOverview"></div>
+    </div>
+  </div>
+
+  <!-- Suivi -->
+  <div id="aSuivi" class="page">
+    <div id="adminSuiviContent"></div>
+  </div>
+
+  <!-- Scores -->
+  <div id="aScores" class="page">
+    <div class="stat-grid" id="adminStatGrid"></div>
+    <div class="card">
+      <div class="card-title">Classement</div>
+      <div id="adminLeaderboard"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Détail des scores</div>
+      <div id="adminScoreDetail"></div>
+    </div>
+  </div>
+
+  <!-- Config -->
+  <div id="aConfig" class="page">
+    <div class="card">
+      <div class="card-title">Codes PIN</div>
+      <div id="adminPinConfig"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Codes galets</div>
+      <p style="font-size:13px;color:var(--ink-muted);margin-bottom:12px">Codes à inscrire sur les galets pour chaque étape.</p>
+      <div id="adminGaletCodes"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Équipes</div>
+      <div id="adminEquipesConfig"></div>
+    </div>
+  </div>
+</div>
+
+<!-- GM APP -->
+<div id="gmApp" style="display:none">
+  <div class="app-header">
+    <div>
+      <div class="app-header-title" id="gmStepTitle">Game Master</div>
+      <div class="app-header-sub" id="gmStepSub">En attente...</div>
+    </div>
+    <button class="logout-btn" onclick="logout()">Quitter</button>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="gmTab('attente',this)">⏳ Attente</button>
+    <button class="nav-tab" onclick="gmTab('epreuve',this)">🎯 Épreuve</button>
+    <button class="nav-tab" onclick="gmTab('scores',this)">🏆 Scores</button>
+  </div>
+  <div id="gAttente" class="page active">
+    <div class="notice">Restez à votre poste. Quand une équipe arrive, elle entrera son code galet dans l'app. Le jeu vous notifiera automatiquement.</div>
+    <div class="card">
+      <div class="card-title">Équipes attendues à ce poste</div>
+      <div id="gmTeamsExpected"></div>
+    </div>
+    <div id="gmArriveeNotif" style="display:none">
+      <div class="card" style="border-color:var(--gold)">
+        <div class="card-title" style="color:var(--gold-dark)">🔔 Une équipe est arrivée !</div>
+        <div id="gmArriveeContent"></div>
+      </div>
+    </div>
+  </div>
+  <div id="gEpreuve" class="page">
+    <div class="card">
+      <div class="card-title">Sélectionner l'équipe qui joue</div>
+      <div class="team-grid" id="gmTeamSel"></div>
+    </div>
+    <div id="gmEpreuveContent"></div>
+  </div>
+  <div id="gGmScores" class="page">
+    <div class="card">
+      <div class="card-title">Scores à ce poste</div>
+      <div id="gmScoresList"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Classement général</div>
+      <div id="gmLeaderboard"></div>
+    </div>
+  </div>
+</div>
+
+<!-- TEAM APP -->
+<div id="teamApp" style="display:none">
+  <div class="app-header">
+    <div>
+      <div class="app-header-title" id="teamName">Mon équipe</div>
+      <div class="app-header-sub" id="teamHeaderSub">Jeu de piste</div>
+    </div>
+    <button class="logout-btn" onclick="logout()">Quitter</button>
+  </div>
+  <div style="padding:16px" id="teamContent">
+    <div class="notice">Connexion en cours...</div>
+  </div>
+</div>
+
+<!-- MODAL CONFIRM -->
+<div class="modal-backdrop" id="confirmModal">
+  <div class="modal">
+    <div class="modal-title" id="confirmTitle">Confirmer</div>
+    <div class="modal-desc" id="confirmDesc"></div>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeConfirm()">Annuler</button>
+      <button class="btn btn-gold" id="confirmOkBtn" onclick="">Confirmer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== CONFIG =====================
+const SUPABASE_URL='https://ktpiwlcazmodfezrwlqf.supabase.co';
+const SUPABASE_KEY='sb_publishable_rcKC1bFMte1P2qW6OSdiTw_w4KoVfQl';
+const SESSION_KEY='jp_session_v1';
+
+// Données du jeu (à modifier si besoin)
+const ENIGMES = [
+  {
+    id:1, lieu:'Blockhaus',
+    enigme:'Construit pour être utile. Devenu inutile. Cherche à l\'être à nouveau.\nCherche-moi.',
+    indices:[
+      'Avant, on entrait dedans.\nMaintenant, on monte dessus.',
+      'Je suis la cicatrice que personne n\'a voulu effacer.\nLa laideur qui est devenue mémoire.',
+      'Un vestige de la dernière guerre, sur la falaise.\nMonte sur son toit.'
+    ]
+  },
+  {
+    id:2, lieu:'Écluse Saint-Marc',
+    enigme:'Pas de filet. Pas de barque. Pas de ligne.\nEt pourtant je pêche depuis des siècles.\nCherche-moi.',
+    indices:[
+      'Je suis patient.\nJ\'attends que la mer fasse le travail.',
+      'Pierres sèches, sans mortier, posées à la main.\nJe porte le nom d\'un saint — et d\'un futur marié.',
+      'Sur l\'estran, au sud de la villa.\nUn V de pierres qui avance dans la mer.'
+    ]
+  },
+  {
+    id:3, lieu:'Cabanes du port du Plomb',
+    enigme:'Nous sommes deux. Blanchies par le sel et le temps.\nNous n\'avons pas de nom, mais nous avons tout vu.\nCherche-nous.',
+    indices:[
+      'Petites. Modestes. Adossées l\'une à l\'autre.\nDes générations y ont travaillé de leurs mains, à l\'aube.',
+      'Ce qu\'on y faisait demandait la mer — mais pas pour naviguer.\nOn y triait. On y séchait. On y attendait.',
+      'Le port qui nous abrite est plus vieux que les tours de La Rochelle.\nCherche son entrée.'
+    ]
+  },
+  {
+    id:4, lieu:'Pont levant',
+    enigme:'Je relie. Je sépare. Je suis les deux à la fois.\nCherche-moi.',
+    indices:[
+      'Je suis discret. Presque invisible.\nPourtant sans moi, deux rives se regardent sans se toucher.',
+      'Je me lève pour laisser passer les mâts.\nJe sépare deux communes qui partagent le même port.',
+      'Au fond du chenal, entre L\'Houmeau et Nieul-sur-Mer.\nUne passerelle en bois — elle se lève.'
+    ]
+  }
+];
+
+// Ordre des étapes par équipe (indices dans ENIGMES, 0-based)
+const PARCOURS = {
+  // équipe_nom → [ordre des étapes par id]
+  // ex: [0,2,1,3] = Blockhaus, Cabanes, Écluse, Pont
+};
+
+// Scores de départ par étape
+const MAX_SCORE_ETAPE = 10;
+const COUT_INDICE = 2;
+
+const {createClient}=supabase;
+const db=createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
+
+let currentRole=null, currentTeam=null, currentGMStep=null;
+let gameState=null; // lu depuis Supabase: {status, started_at}
+let teamStates={}; // {equipe_nom: {step_idx, phase, score_etape, indices_demandes, started_step_at, ...}}
+let appData={teams:[], config:{}};
+let pins={admin:'0000', gm:{1:'1111',2:'2222',3:'3333',4:'4444'}, teams:{}};
+let realtimeSubs=[];
+let teamTimer=null;
+
+// ===================== SESSION =====================
+function saveSession(){ try{localStorage.setItem(SESSION_KEY,JSON.stringify({role:currentRole,team:currentTeam,gm:currentGMStep,ts:Date.now()}));}catch(e){} }
+function loadSession(){ try{const s=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');if(!s||Date.now()-s.ts>12*60*60*1000){localStorage.removeItem(SESSION_KEY);return null;}return s;}catch(e){return null;} }
+function clearSession(){ try{localStorage.removeItem(SESSION_KEY);}catch(e){} }
+
+// ===================== INIT =====================
+async function init(){
+  try{
+    const [equipes, config, gameRow, tsRows] = await Promise.all([
+      db.from('jp_equipes').select('*').order('id'),
+      db.from('jp_config').select('*'),
+      db.from('jp_game_state').select('*').single(),
+      db.from('jp_team_states').select('*')
+    ]);
+    appData.teams=(equipes.data||[]).map(e=>e.nom);
+    (config.data||[]).forEach(r=>{
+      if(r.key==='pin_admin') pins.admin=r.value;
+      if(r.key==='pin_gm_1') pins.gm[1]=r.value;
+      if(r.key==='pin_gm_2') pins.gm[2]=r.value;
+      if(r.key==='pin_gm_3') pins.gm[3]=r.value;
+      if(r.key==='pin_gm_4') pins.gm[4]=r.value;
+      if(r.key.startsWith('pin_team_')) pins.teams[r.key.replace('pin_team_','')]=r.value;
+      if(r.key.startsWith('galet_')) appData.config[r.key]=r.value;
+      if(r.key.startsWith('parcours_')) {
+        const team=r.key.replace('parcours_','');
+        PARCOURS[team]=JSON.parse(r.value||'[0,1,2,3]');
+      }
+    });
+    gameState=gameRow.data||{status:'waiting',started_at:null};
+    teamStates={};
+    (tsRows.data||[]).forEach(r=>{ teamStates[r.equipe_nom]=r; });
+  }catch(e){ console.error('Init error',e); }
+
+  document.getElementById('globalLoader').style.display='none';
+
+  // Restore session
+  const sess=loadSession();
+  if(sess){
+    currentRole=sess.role; currentTeam=sess.team; currentGMStep=sess.gm;
+    if(currentRole==='admin'){ enterAdmin(); return; }
+    if(currentRole==='gm'){ enterGM(); return; }
+    if(currentRole==='team' && currentTeam){ enterTeam(); return; }
+  }
+  document.getElementById('loginScreen').style.display='block';
+}
+
+// ===================== LOGIN =====================
+function selectRole(r){
+  ['admin','gm','team'].forEach(id=>document.getElementById('role'+id.charAt(0).toUpperCase()+id.slice(1)).classList.toggle('selected',r===id));
+  currentRole=r;
+}
+
+async function doLogin(){
+  const pin=document.getElementById('pinInput').value.trim();
+  const err=document.getElementById('loginErr');
+  err.style.display='none';
+  if(!currentRole){ err.textContent='Choisissez un rôle.'; err.style.display='block'; return; }
+
+  if(currentRole==='admin' && pin===pins.admin){ enterAdmin(); saveSession(); return; }
+  if(currentRole==='gm'){
+    for(let i=1;i<=4;i++){
+      if(pin===pins.gm[i]){ currentGMStep=i; enterGM(); saveSession(); return; }
+    }
+  }
+  if(currentRole==='team'){
+    const team=Object.entries(pins.teams).find(([_,p])=>p===pin);
+    if(team){ currentTeam=team[0]; enterTeam(); saveSession(); return; }
+  }
+  err.textContent='PIN incorrect'; err.style.display='block';
+}
+
+function logout(){
+  clearSession(); currentRole=null; currentTeam=null; currentGMStep=null;
+  realtimeSubs.forEach(s=>{ try{s.unsubscribe();}catch(e){} }); realtimeSubs=[];
+  if(teamTimer){ clearInterval(teamTimer); teamTimer=null; }
+  ['adminApp','gmApp','teamApp'].forEach(id=>document.getElementById(id).style.display='none');
+  document.getElementById('loginScreen').style.display='block';
+  document.getElementById('pinInput').value='';
+  document.getElementById('loginErr').style.display='none';
+  ['roleAdmin','roleGm','roleTeam'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.remove('selected');});
+}
+
+// ===================== ADMIN =====================
+function enterAdmin(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('adminApp').style.display='block';
+  renderAdminControl(); renderAdminConfig();
+  subscribeAdminRealtime();
+}
+
+function adminTab(name,btn){
+  document.querySelectorAll('#adminApp .page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('#adminApp .nav-tab').forEach(b=>b.classList.remove('active'));
+  const map={control:'aControl',suivi:'aSuivi',scores:'aScores',config:'aConfig'};
+  document.getElementById(map[name]).classList.add('active'); btn.classList.add('active');
+  if(name==='suivi') renderAdminSuivi();
+  if(name==='scores') renderAdminScores();
+  if(name==='config') renderAdminConfig();
+}
+
+function renderAdminControl(){
+  const el=document.getElementById('adminGameStatus');
+  const actEl=document.getElementById('adminGameActions');
+  const status=gameState?.status||'waiting';
+  if(status==='waiting'){
+    el.innerHTML=`<div class="status-pill waiting" style="margin-bottom:10px">⏸ Jeu en attente</div><p style="font-size:13px;color:var(--ink-muted)">Le jeu n'a pas encore démarré. Quand tout le monde est prêt, lancez le jeu.</p>`;
+    actEl.innerHTML=`<button class="btn btn-gold" onclick="openConfirm('Démarrer le jeu ?','Toutes les équipes recevront leur instruction de départ simultanément.','startGame()')">▶ Démarrer le jeu</button>`;
+  } else if(status==='active'){
+    const t=gameState.started_at?Math.floor((Date.now()-new Date(gameState.started_at))/60000):0;
+    el.innerHTML=`<div class="status-pill active" style="margin-bottom:10px">🟢 Jeu en cours — T+${t} min</div><p style="font-size:13px;color:var(--ink-muted)">Démarré à ${gameState.started_at?new Date(gameState.started_at).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):'-'}</p>`;
+    actEl.innerHTML=`<button class="btn btn-danger" onclick="openConfirm('Arrêter le jeu ?','Ceci mettra fin à la partie pour toutes les équipes.','stopGame()')">⏹ Arrêter</button>`;
+  } else {
+    el.innerHTML=`<div class="status-pill done" style="margin-bottom:10px">✅ Jeu terminé</div>`;
+    actEl.innerHTML=`<button class="btn" onclick="openConfirm('Réinitialiser ?','Remettre le jeu à zéro pour toutes les équipes.','resetGame()')">🔄 Réinitialiser</button>`;
+  }
+
+  // Team overview
+  const ov=document.getElementById('adminTeamOverview');
+  if(!appData.teams.length){ ov.innerHTML='<div class="notice">Aucune équipe configurée.</div>'; return; }
+  ov.innerHTML=appData.teams.map(t=>{
+    const ts=teamStates[t];
+    const step=ts?.step_idx??-1;
+    const phase=ts?.phase||'waiting';
+    const score=ts?.total_score||0;
+    let dotCls='dot-waiting', statusTxt='En attente';
+    if(phase==='done'){dotCls='dot-done';statusTxt='Terminé';}
+    else if(phase!=='waiting'){dotCls='dot-active';statusTxt=`Étape ${step+1}/4 · ${phaseLabel(phase)}`;}
+    return`<div class="equipe-row">
+      <span class="equipe-status-dot ${dotCls}"></span>
+      <span style="flex:1;font-size:14px;font-weight:500">${t}</span>
+      <span class="progress-mini">${statusTxt}</span>
+      <span style="font-size:13px;font-weight:500;color:var(--gold-dark)">${score} pts</span>
+    </div>`;
+  }).join('');
+}
+
+function phaseLabel(p){
+  const m={waiting:'Attente',enigme:'Énigme',marche:'Marche',galet:'Cherche le galet',epreuve:'Épreuve',done:'Terminé'};
+  return m[p]||p;
+}
+
+function renderAdminSuivi(){
+  const el=document.getElementById('adminSuiviContent');
+  if(!appData.teams.length){ el.innerHTML='<div class="notice">Aucune équipe.</div>'; return; }
+  el.innerHTML=appData.teams.map(t=>{
+    const ts=teamStates[t];
+    const step=ts?.step_idx??-1;
+    const phase=ts?.phase||'waiting';
+    const score=ts?.total_score||0;
+    const parcours=PARCOURS[t]||[0,1,2,3];
+    const stepsDots=parcours.map((eid,i)=>{
+      const e=ENIGMES[eid];
+      let cls='step-dot';
+      if(i<step||(i===step&&phase==='done')) cls='step-dot done';
+      else if(i===step) cls='step-dot active';
+      return`<div class="${cls}" title="${e.lieu}">${i+1}</div>${i<3?`<div class="step-line${i<step?' done':''}"></div>`:''}`;
+    }).join('');
+    const indices=ts?.indices_demandes||0;
+    const scoreEtape=ts?.score_etape??MAX_SCORE_ETAPE;
+    return`<div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <span style="font-size:15px;font-weight:500">${t}</span>
+        <span style="font-size:13px;font-weight:500;color:var(--gold-dark)">${score} pts total</span>
+      </div>
+      <div class="step-progress">${stepsDots}</div>
+      ${step>=0?`<div style="font-size:12px;color:var(--ink-muted)">Phase : <strong>${phaseLabel(phase)}</strong> · Indices utilisés : ${indices} · Score étape en cours : ${scoreEtape}/10</div>`:'<div style="font-size:12px;color:var(--ink-muted)">En attente du démarrage</div>'}
+    </div>`;
+  }).join('');
+}
+
+function renderAdminScores(){
+  const el=document.getElementById('adminLeaderboard');
+  const det=document.getElementById('adminScoreDetail');
+  const sg=document.getElementById('adminStatGrid');
+  const ranked=appData.teams.map(t=>({name:t,total:teamStates[t]?.total_score||0})).sort((a,b)=>b.total-a.total);
+  const max=Math.max(...ranked.map(r=>r.total),1);
+  const medals=['🥇','🥈','🥉'];
+  el.innerHTML=ranked.map((r,i)=>`<div class="lb-row"><span class="lb-rank ${['gold','silver','bronze'][i]||''}">${medals[i]||i+1}</span><span class="lb-name">${r.name}</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:${Math.round(r.total/max*100)}%"></div></div><span class="lb-pts">${r.total} pts</span></div>`).join('');
+  const totalMax=MAX_SCORE_ETAPE*4;
+  sg.innerHTML=`<div class="stat-card"><div class="stat-val">${appData.teams.length}</div><div class="stat-lbl">Équipes</div></div><div class="stat-card"><div class="stat-val">${totalMax}</div><div class="stat-lbl">Points max</div></div><div class="stat-card"><div class="stat-val">4</div><div class="stat-lbl">Étapes</div></div><div class="stat-card"><div class="stat-val">${ranked.filter(r=>r.total>0).length}</div><div class="stat-lbl">En jeu</div></div>`;
+  det.innerHTML=appData.teams.map(t=>{
+    const ts=teamStates[t];
+    const scores=ts?.scores_etapes||[];
+    return`<div style="display:flex;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span style="flex:1;font-size:13px;font-weight:500">${t}</span>
+      ${scores.map((s,i)=>`<span style="font-size:12px;background:var(--cream);border-radius:4px;padding:2px 8px;color:var(--ink-muted)">É${i+1}:${s??'-'}</span>`).join('')}
+      <span style="font-size:13px;font-weight:500;color:var(--gold-dark)">${ts?.total_score||0} pts</span>
+    </div>`;
+  }).join('');
+}
+
+function renderAdminConfig(){
+  // PIN config
+  const pc=document.getElementById('adminPinConfig');
+  pc.innerHTML=`
+    <div style="margin-bottom:10px">
+      <div class="field-label">Admin</div>
+      <input type="text" value="${pins.admin}" id="cfgPinAdmin" style="width:140px;letter-spacing:3px" onchange="savePin('pin_admin',this.value)">
+    </div>
+    ${[1,2,3,4].map(i=>`<div style="margin-bottom:10px"><div class="field-label">Game Master poste ${i} (${ENIGMES[i-1]?.lieu||''})</div><input type="text" value="${pins.gm[i]}" style="width:140px;letter-spacing:3px" onchange="savePin('pin_gm_${i}',this.value)"></div>`).join('')}
+    ${appData.teams.map(t=>`<div style="margin-bottom:10px"><div class="field-label">Équipe : ${t}</div><input type="text" value="${pins.teams[t]||''}" style="width:140px;letter-spacing:3px" onchange="savePin('pin_team_${t}',this.value)"></div>`).join('')}`;
+
+  // Galet codes
+  const gc=document.getElementById('adminGaletCodes');
+  gc.innerHTML=ENIGMES.map((e,i)=>`<div style="margin-bottom:10px"><div class="field-label">Étape ${i+1} — ${e.lieu}</div><input type="text" id="galetCode${i}" value="${appData.config['galet_'+(i+1)]||''}" placeholder="Ex: 7832" style="width:140px;letter-spacing:3px" onchange="savePin('galet_${i+1}',this.value)"></div>`).join('');
+
+  // Équipes & parcours
+  const eq=document.getElementById('adminEquipesConfig');
+  eq.innerHTML=`<p style="font-size:13px;color:var(--ink-muted);margin-bottom:12px">Ordre de passage pour chaque équipe (numéros des étapes séparés par des virgules : 1,2,3,4)</p>`+
+  appData.teams.map(t=>{
+    const p=PARCOURS[t]||[0,1,2,3];
+    return`<div style="margin-bottom:10px"><div class="field-label">${t}</div><input type="text" value="${p.map(x=>x+1).join(',')}" placeholder="1,2,3,4" style="width:180px" onchange="saveParcours('${t}',this.value)"></div>`;
+  }).join('')+`<button class="btn btn-gold btn-sm" onclick="addEquipe()">+ Ajouter une équipe</button>`;
+}
+
+async function savePin(key,val){
+  pins_update(key,val);
+  await db.from('jp_config').upsert({key,value:val},{onConflict:'key'});
+}
+function pins_update(key,val){
+  if(key==='pin_admin') pins.admin=val;
+  if(key.startsWith('pin_gm_')) pins.gm[parseInt(key.slice(-1))]=val;
+  if(key.startsWith('pin_team_')) pins.teams[key.replace('pin_team_','')]=val;
+  if(key.startsWith('galet_')) appData.config[key]=val;
+}
+
+async function saveParcours(team,val){
+  const arr=val.split(',').map(x=>parseInt(x.trim())-1).filter(x=>x>=0&&x<4);
+  if(arr.length!==4){ showToast({icon:'⚠️',title:'Format invalide',msg:'Utilisez 4 chiffres séparés par des virgules, ex: 1,3,2,4'}); return; }
+  PARCOURS[team]=arr;
+  await db.from('jp_config').upsert({key:'parcours_'+team,value:JSON.stringify(arr)},{onConflict:'key'});
+  showToast({icon:'✅',title:`Parcours de ${team} sauvegardé`,duration:2500});
+}
+
+async function addEquipe(){
+  const nom=prompt('Nom de la nouvelle équipe :');
+  if(!nom?.trim()) return;
+  await db.from('jp_equipes').insert({nom:nom.trim()});
+  appData.teams.push(nom.trim());
+  renderAdminConfig(); renderAdminControl();
+  showToast({icon:'✅',title:`Équipe "${nom.trim()}" créée`,duration:2500});
+}
+
+async function startGame(){
+  closeConfirm();
+  const now=new Date().toISOString();
+  gameState={status:'active',started_at:now};
+  await db.from('jp_game_state').upsert({id:1,status:'active',started_at:now},{onConflict:'id'});
+  // Initialiser les états d'équipe
+  for(const t of appData.teams){
+    const parcours=PARCOURS[t]||[0,1,2,3];
+    const ts={equipe_nom:t,step_idx:0,phase:'enigme',score_etape:MAX_SCORE_ETAPE,indices_demandes:0,scores_etapes:[],total_score:0,started_step_at:now,parcours:JSON.stringify(parcours)};
+    teamStates[t]=ts;
+    await db.from('jp_team_states').upsert(ts,{onConflict:'equipe_nom'});
+  }
+  renderAdminControl();
+  showToast({icon:'🚀',title:'Jeu démarré !',msg:'Toutes les équipes ont reçu leur instruction.',type:'gold',duration:5000});
+}
+
+async function stopGame(){
+  closeConfirm();
+  gameState={...gameState,status:'done'};
+  await db.from('jp_game_state').upsert({id:1,...gameState,status:'done'},{onConflict:'id'});
+  renderAdminControl();
+}
+
+async function resetGame(){
+  closeConfirm();
+  gameState={status:'waiting',started_at:null};
+  teamStates={};
+  await db.from('jp_game_state').upsert({id:1,status:'waiting',started_at:null},{onConflict:'id'});
+  await db.from('jp_team_states').delete().neq('equipe_nom','__none__');
+  renderAdminControl();
+  showToast({icon:'🔄',title:'Jeu réinitialisé',duration:3000});
+}
+
+function subscribeAdminRealtime(){
+  const s1=db.channel('admin-game').on('postgres_changes',{event:'*',schema:'public',table:'jp_game_state'},p=>{
+    if(p.new) gameState=p.new;
+    renderAdminControl();
+  }).subscribe();
+  const s2=db.channel('admin-teams').on('postgres_changes',{event:'*',schema:'public',table:'jp_team_states'},p=>{
+    if(p.new) teamStates[p.new.equipe_nom]=p.new;
+    renderAdminControl();
+    const activeTab=document.querySelector('#adminApp .nav-tab.active');
+    if(activeTab?.textContent.includes('Suivi')) renderAdminSuivi();
+    if(activeTab?.textContent.includes('Scores')) renderAdminScores();
+  }).subscribe();
+  realtimeSubs.push(s1,s2);
+}
+
+// ===================== GM =====================
+function enterGM(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('gmApp').style.display='block';
+  const e=ENIGMES[currentGMStep-1];
+  document.getElementById('gmStepTitle').textContent=`GM · ${e?.lieu||'Poste '+currentGMStep}`;
+  document.getElementById('gmStepSub').textContent=`Étape ${currentGMStep} · En attente d'équipes`;
+  renderGMTeams(); renderGMScores(); subscribeGMRealtime();
+}
+
+function gmTab(name,btn){
+  document.querySelectorAll('#gmApp .page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('#gmApp .nav-tab').forEach(b=>b.classList.remove('active'));
+  const map={attente:'gAttente',epreuve:'gEpreuve',scores:'gGmScores'};
+  document.getElementById(map[name]).classList.add('active'); btn.classList.add('active');
+  if(name==='scores') renderGMScores();
+}
+
+function renderGMTeams(){
+  const el=document.getElementById('gmTeamsExpected');
+  const arriving=appData.teams.filter(t=>{
+    const ts=teamStates[t];
+    if(!ts) return false;
+    const p=JSON.parse(ts.parcours||'[0,1,2,3]');
+    const stepEId=p[ts.step_idx];
+    return stepEId===currentGMStep-1;
+  });
+  if(!arriving.length){ el.innerHTML='<div class="notice">Aucune équipe attendue pour le moment.</div>'; return; }
+  el.innerHTML=arriving.map(t=>`<div class="equipe-row"><span class="equipe-status-dot dot-active"></span><span style="flex:1;font-size:14px;font-weight:500">${t}</span><span class="progress-mini">${phaseLabel(teamStates[t]?.phase)}</span></div>`).join('');
+
+  // Team selector for epreuve
+  document.getElementById('gmTeamSel').innerHTML=arriving.map(t=>`<button class="team-btn" onclick="gmSelectTeam('${t}')">${t}</button>`).join('');
+}
+
+let gmCurrentTeam=null;
+function gmSelectTeam(name){
+  gmCurrentTeam=name;
+  document.querySelectorAll('#gmTeamSel .team-btn').forEach(b=>b.classList.toggle('selected',b.textContent===name));
+  renderGMEpreuve();
+}
+
+function renderGMEpreuve(){
+  const el=document.getElementById('gmEpreuveContent');
+  if(!gmCurrentTeam){el.innerHTML='';return;}
+  const ts=teamStates[gmCurrentTeam];
+  if(!ts){el.innerHTML='<div class="notice">Équipe non trouvée.</div>';return;}
+  const phase=ts.phase;
+  const score=ts.score_etape??MAX_SCORE_ETAPE;
+  const eId=JSON.parse(ts.parcours||'[0,1,2,3]')[ts.step_idx];
+  const e=ENIGMES[eId];
+  if(phase==='epreuve'){
+    el.innerHTML=`<div class="epreuve-banner"><div class="epreuve-banner-title">🎯 ${gmCurrentTeam} est prêt pour l'épreuve</div><div class="epreuve-banner-sub">Score en jeu pour cette étape : ${score} pts</div></div>
+    <div class="card">
+      <div class="card-title">Étape ${ts.step_idx+1} — ${e?.lieu}</div>
+      <p style="font-size:13px;color:var(--ink-muted);margin-bottom:14px">L'équipe a trouvé l'endroit et attend votre épreuve.</p>
+      <div style="display:flex;gap:8px">
+        <input type="number" id="gmScoreInput" placeholder="Score" min="0" max="${MAX_SCORE_ETAPE}" style="width:90px">
+        <button class="btn btn-gold" onclick="gmValidateScore()">✓ Valider et continuer</button>
+      </div>
+    </div>`;
+  } else {
+    el.innerHTML=`<div class="notice">L'équipe est en phase <strong>${phaseLabel(phase)}</strong> — pas encore prête pour l'épreuve.</div>`;
+  }
+}
+
+async function gmValidateScore(){
+  if(!gmCurrentTeam) return;
+  const scoreInput=document.getElementById('gmScoreInput');
+  const score=Math.min(MAX_SCORE_ETAPE,Math.max(0,parseInt(scoreInput?.value)||0));
+  const ts=teamStates[gmCurrentTeam];
+  if(!ts) return;
+  const scores=ts.scores_etapes||[];
+  scores[ts.step_idx]=score;
+  const total=scores.reduce((a,b)=>a+(b||0),0);
+  const isLast=ts.step_idx>=3;
+  const newPhase=isLast?'done':'marche';
+  const newStep=isLast?ts.step_idx:ts.step_idx+1;
+  const update={scores_etapes:scores,total_score:total,phase:newPhase,step_idx:newStep,score_etape:MAX_SCORE_ETAPE,indices_demandes:0,started_step_at:new Date().toISOString()};
+  await db.from('jp_team_states').update(update).eq('equipe_nom',gmCurrentTeam);
+  teamStates[gmCurrentTeam]={...ts,...update};
+  showToast({icon:'✅',title:`${score} pts pour ${gmCurrentTeam}`,type:'success',duration:3000});
+  renderGMEpreuve();
+  renderGMScores();
+}
+
+function renderGMScores(){
+  const el=document.getElementById('gmScoresList');
+  el.innerHTML=appData.teams.map(t=>{
+    const ts=teamStates[t];
+    const p=JSON.parse(ts?.parcours||'[0,1,2,3]');
+    const myStepIdx=p.indexOf(currentGMStep-1);
+    const s=ts?.scores_etapes?.[myStepIdx];
+    return`<div class="lb-row"><span class="lb-name">${t}</span><span class="lb-pts">${s==null?'—':s+' pts'}</span></div>`;
+  }).join('');
+  const ranked=appData.teams.map(t=>({name:t,total:teamStates[t]?.total_score||0})).sort((a,b)=>b.total-a.total);
+  const max=Math.max(...ranked.map(r=>r.total),1);
+  document.getElementById('gmLeaderboard').innerHTML=ranked.map((r,i)=>`<div class="lb-row"><span class="lb-rank ${['gold','silver','bronze'][i]||''}">${['🥇','🥈','🥉'][i]||i+1}</span><span class="lb-name">${r.name}</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:${Math.round(r.total/max*100)}%"></div></div><span class="lb-pts">${r.total} pts</span></div>`).join('');
+}
+
+function subscribeGMRealtime(){
+  const s=db.channel('gm-teams').on('postgres_changes',{event:'*',schema:'public',table:'jp_team_states'},p=>{
+    if(p.new){ teamStates[p.new.equipe_nom]=p.new; }
+    renderGMTeams();
+    if(gmCurrentTeam) renderGMEpreuve();
+    renderGMScores();
+    // Notify if team arrived at this step
+    if(p.new && p.new.phase==='epreuve'){
+      const prc=JSON.parse(p.new.parcours||'[0,1,2,3]');
+      if(prc[p.new.step_idx]===currentGMStep-1){
+        showToast({icon:'🔔',title:`${p.new.equipe_nom} est arrivé !`,msg:'Prêt pour l\'épreuve.',type:'gold',duration:8000});
+        document.getElementById('gmArriveeNotif').style.display='block';
+        document.getElementById('gmArriveeContent').innerHTML=`<p style="font-size:14px;font-weight:500">${p.new.equipe_nom}</p><p style="font-size:13px;color:var(--ink-muted)">Score disponible : ${p.new.score_etape} pts</p><div class="action-row"><button class="btn btn-gold btn-sm" onclick="gmSelectTeam('${p.new.equipe_nom}');gmTab('epreuve',document.querySelector('[onclick*=epreuve]'))">Gérer l'épreuve →</button></div>`;
+      }
+    }
+  }).subscribe();
+  realtimeSubs.push(s);
+}
+
+// ===================== TEAM =====================
+function enterTeam(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('teamApp').style.display='block';
+  document.getElementById('teamName').textContent=currentTeam;
+  renderTeamView();
+  subscribeTeamRealtime();
+  if(teamTimer) clearInterval(teamTimer);
+  teamTimer=setInterval(()=>{ if(teamStates[currentTeam]?.phase==='enigme') renderTeamView(); },10000);
+}
+
+function renderTeamView(){
+  const el=document.getElementById('teamContent');
+  const gs=gameState;
+  if(!gs||gs.status==='waiting'){
+    el.innerHTML=`<div class="card" style="text-align:center;padding:2rem">
+      <div style="font-size:40px;margin-bottom:16px">⚓</div>
+      <div style="font-family:'Dancing Script',cursive;font-size:24px;color:var(--gold-dark);margin-bottom:8px">Caroline & Marc</div>
+      <div style="font-size:13px;color:var(--ink-muted);margin-bottom:20px">Jeu de piste · 5 septembre 2026</div>
+      <div class="status-pill waiting" style="justify-content:center">⏸ En attente du démarrage</div>
+      <p style="font-size:13px;color:var(--ink-muted);margin-top:14px">L'administrateur lancera le jeu d'ici quelques instants. Restez sur cette page.</p>
+    </div>`;
+    return;
+  }
+  if(gs.status==='done'){
+    const ts=teamStates[currentTeam];
+    el.innerHTML=`<div class="card" style="text-align:center;padding:2rem">
+      <div style="font-size:40px;margin-bottom:12px">🏆</div>
+      <div class="score-display"><div class="score-big">${ts?.total_score||0}</div><div class="score-sub">points sur ${MAX_SCORE_ETAPE*4}</div></div>
+      <p style="font-size:13px;color:var(--ink-muted);margin-top:14px">Jeu terminé — bravo à tous !</p>
+    </div>`;
+    return;
+  }
+
+  const ts=teamStates[currentTeam];
+  if(!ts){
+    el.innerHTML=`<div class="notice">Jeu démarré — chargement de votre état...</div>`;
+    return;
+  }
+
+  const phase=ts.phase;
+  const stepIdx=ts.step_idx;
+  const parcours=JSON.parse(ts.parcours||'[0,1,2,3]');
+  const enigmeId=parcours[stepIdx];
+  const enigme=ENIGMES[enigmeId];
+  const score=ts.score_etape??MAX_SCORE_ETAPE;
+  const indicesUsed=ts.indices_demandes||0;
+  const indicesShown=ts.indices_shown||0;
+
+  // Progress dots
+  const dots=parcours.map((_,i)=>{
+    let cls='step-dot';
+    if(i<stepIdx) cls='step-dot done';
+    else if(i===stepIdx) cls='step-dot active';
+    return`<div class="${cls}">${i+1}</div>${i<3?`<div class="step-line${i<stepIdx?' done':''}"></div>`:''}`;
+  }).join('');
+
+  let html=`<div class="step-progress">${dots}</div>`;
+
+  if(phase==='done'){
+    html+=`<div class="card" style="text-align:center;padding:2rem">
+      <div style="font-size:40px;margin-bottom:12px">🎉</div>
+      <div class="score-display"><div class="score-big">${ts.total_score||0}</div><div class="score-sub">points · toutes étapes terminées !</div></div>
+    </div>`;
+    el.innerHTML=html; return;
+  }
+
+  // Score étape en cours
+  const elapsed=ts.started_step_at?Math.floor((Date.now()-new Date(ts.started_step_at))/60000):0;
+  const pct=Math.max(0,Math.min(100,score/MAX_SCORE_ETAPE*100));
+  const barCls=score>=7?'':'score>=4?warn:danger';
+
+  if(phase==='enigme'){
+    // Timer bar
+    html+=`<div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <span class="phase-tag enigme">🧩 Énigme</span>
+        <span style="font-size:13px;font-weight:500;color:var(--gold-dark)">${score} pts disponibles</span>
+      </div>
+      <div class="timer-label">${elapsed} min écoulées</div>
+      <div class="timer-bar-wrap"><div class="timer-bar${score<=3?' danger':score<=6?' warn':''}" style="width:${pct}%"></div></div>
+    </div>`;
+
+    // Enigme
+    html+=`<div class="enigme-card">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--gold-dark);margin-bottom:10px">Étape ${stepIdx+1} · ${enigme.lieu}</div>
+      <div class="enigme-text">${enigme.enigme.replace(/\n/g,'<br>')}</div>
+    </div>`;
+
+    // Indices déjà affichés
+    for(let i=0;i<indicesShown;i++){
+      html+=`<div class="indice-card"><div class="indice-num">Indice ${i+1}</div><div class="indice-text">${enigme.indices[i].replace(/\n/g,'<br>')}</div></div>`;
+    }
+
+    // Bouton indice suivant
+    if(indicesShown<3 && score>0){
+      html+=`<button class="btn btn-full" style="margin-bottom:10px" onclick="demanderIndice()">💡 Demander l'indice ${indicesShown+1} <span style="font-size:12px;color:var(--ink-muted)">(−${COUT_INDICE} pts)</span></button>`;
+    }
+
+    // Bouton "j'ai trouvé"
+    html+=`<div class="card">
+      <div class="card-title">J'ai trouvé l'endroit !</div>
+      <p style="font-size:13px;color:var(--ink-muted);margin-bottom:12px">Entrez le code inscrit sur le galet pour confirmer votre arrivée.</p>
+      <div class="code-input-wrap">
+        <input type="text" id="galetInput" class="code-input" placeholder="····" maxlength="8" inputmode="numeric">
+        <button class="btn btn-gold" onclick="validerGalet()">✓</button>
+      </div>
+      <div class="err-msg" id="galetErr" style="display:none">Code incorrect</div>
+    </div>`;
+
+  } else if(phase==='epreuve'){
+    html+=`<div class="epreuve-banner">
+      <div class="epreuve-banner-title">🎯 Vous êtes arrivés !</div>
+      <div class="epreuve-banner-sub">${enigme.lieu} · Score acquis sur l'énigme : ${score} pts</div>
+    </div>
+    <div class="card">
+      <span class="phase-tag epreuve">Épreuve en cours</span>
+      <p style="font-size:14px;color:var(--ink-soft);line-height:1.6">Le Game Master va vous faire passer l'épreuve. Attendez ses instructions.</p>
+    </div>`;
+
+  } else if(phase==='marche'){
+    const nextEId=parcours[stepIdx];
+    const nextE=ENIGMES[nextEId];
+    html+=`<div class="card">
+      <span class="phase-tag marche">En marche</span>
+      <p style="font-size:14px;color:var(--ink-soft);line-height:1.6;margin-bottom:14px">Bien joué ! Rendez-vous à l'étape suivante.</p>
+      <div class="enigme-card">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--gold-dark);margin-bottom:10px">Étape ${stepIdx+1}</div>
+        <div class="enigme-text">${nextE?.enigme.replace(/\n/g,'<br>')||''}</div>
+      </div>
+    </div>`;
+  }
+
+  el.innerHTML=html;
+}
+
+async function demanderIndice(){
+  const ts=teamStates[currentTeam];
+  if(!ts) return;
+  const indicesShown=ts.indices_shown||0;
+  if(indicesShown>=3) return;
+  const newScore=Math.max(0,(ts.score_etape??MAX_SCORE_ETAPE)-COUT_INDICE);
+  const update={score_etape:newScore,indices_demandes:(ts.indices_demandes||0)+1,indices_shown:indicesShown+1};
+  await db.from('jp_team_states').update(update).eq('equipe_nom',currentTeam);
+  teamStates[currentTeam]={...ts,...update};
+  renderTeamView();
+}
+
+async function validerGalet(){
+  const input=document.getElementById('galetInput');
+  const err=document.getElementById('galetErr');
+  if(!input) return;
+  const code=input.value.trim();
+  const ts=teamStates[currentTeam];
+  if(!ts) return;
+  const parcours=JSON.parse(ts.parcours||'[0,1,2,3]');
+  const enigmeId=parcours[ts.step_idx];
+  const expected=appData.config['galet_'+(enigmeId+1)]||'';
+  if(!expected){ err.textContent='Code non configuré par l\'admin.'; err.style.display='block'; return; }
+  if(code!==expected){ err.style.display='block'; return; }
+  err.style.display='none';
+  // Valider : passer en phase épreuve, figer le score
+  const update={phase:'epreuve'};
+  await db.from('jp_team_states').update(update).eq('equipe_nom',currentTeam);
+  teamStates[currentTeam]={...ts,...update};
+  renderTeamView();
+  showToast({icon:'🎯',title:'Code validé !',msg:'Le Game Master va vous prendre en charge.',type:'success',duration:5000});
+}
+
+function subscribeTeamRealtime(){
+  const s=db.channel('team-'+currentTeam).on('postgres_changes',{event:'*',schema:'public',table:'jp_team_states',filter:`equipe_nom=eq.${currentTeam}`},p=>{
+    if(p.new) teamStates[currentTeam]=p.new;
+    renderTeamView();
+  }).subscribe();
+  const s2=db.channel('team-game').on('postgres_changes',{event:'*',schema:'public',table:'jp_game_state'},p=>{
+    if(p.new) gameState=p.new;
+    renderTeamView();
+  }).subscribe();
+  realtimeSubs.push(s,s2);
+}
+
+// ===================== UTILS =====================
+function showToast({icon='ℹ️',title,msg='',type='',duration=4000}){
+  const el=document.createElement('div');
+  el.className=`toast ${type}`;
+  el.innerHTML=`<span class="toast-icon">${icon}</span><div class="toast-body"><div class="toast-title">${title}</div>${msg?`<div class="toast-msg">${msg}</div>`:''}</div>`;
+  document.getElementById('toastContainer').appendChild(el);
+  if(duration) setTimeout(()=>el.remove(),duration);
+}
+
+function openConfirm(title,desc,fn){
+  document.getElementById('confirmTitle').textContent=title;
+  document.getElementById('confirmDesc').textContent=desc;
+  document.getElementById('confirmOkBtn').setAttribute('onclick',fn);
+  document.getElementById('confirmModal').classList.add('open');
+}
+function closeConfirm(){ document.getElementById('confirmModal').classList.remove('open'); }
+
+init();
+</script>
+</body>
+</html>
