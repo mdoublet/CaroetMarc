@@ -3167,7 +3167,7 @@ function renderJdpEnigmeEditor(){
           <span class="field-label" style="margin:0;${isLast?'color:var(--gold-dark);font-weight:600':''}">${NOMS_INDICES[k]}</span>
           ${isLast?'<span style="font-size:11px;background:var(--gold-light);color:var(--gold-dark);padding:1px 8px;border-radius:10px">donne le code directement</span>':'<span style="font-size:11px;color:var(--ink-muted)">débloqué après ${(k+1)*2} min</span>'}
         </div>
-        <textarea id="jdpIndice_${k}" placeholder="${isLast?'Le code à trouver ou hint final…':'Texte de l'indice '+(k+1)+'…'}"
+        <textarea id="jdpIndice_${k}" placeholder="${isLast?'Le code à trouver ou hint final…':'Texte indice '+(k+1)}"
           style="width:100%;min-height:${isLast?'50':'55'}px;padding:9px 11px;border-radius:var(--radius-sm);border:1px solid ${isLast?'var(--gold)':'var(--border)'};background:${isLast?'var(--gold-light)':'var(--cream)'};color:var(--ink);font-family:'Playfair Display',serif;font-size:14px;font-style:italic;line-height:1.7;resize:vertical">${txt.replace(/</g,'&lt;')}</textarea>
       </div>`;
     }).join('')}
@@ -3304,3 +3304,6 @@ function renderJdpScores(){
 }
 
 init();
+</script>
+</body>
+</html>
