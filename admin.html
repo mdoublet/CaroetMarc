@@ -353,7 +353,6 @@ input[type=file]{display:none}
     <div class="nav-tabs" style="margin:-16px -0px 16px;border-radius:0">
       <button class="nav-tab active" onclick="jdpTab('controle',this)">🎮 Contrôle</button>
       <button class="nav-tab" onclick="jdpTab('suivi',this)">📍 Suivi</button>
-      <button class="nav-tab" onclick="jdpTab('enigmes',this)">🧩 Énigmes</button>
       <button class="nav-tab" onclick="jdpTab('scoring',this)">⚙️ Scoring</button>
       <button class="nav-tab" onclick="jdpTab('scores',this)">🏆 Scores</button>
     </div>
@@ -376,25 +375,6 @@ input[type=file]{display:none}
       <div id="jdpSuiviContent"></div>
     </div>
 
-    <!-- Énigmes & codes galets -->
-    <div id="jdpEnigmes" class="jdp-tab-page" style="display:none">
-      <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div class="card-title" style="margin:0">Lieux / Étapes</div>
-          <button class="btn btn-sm" onclick="jdpAddLieu()">+ Ajouter un lieu</button>
-        </div>
-        <p style="font-size:13px;color:var(--ink-muted);margin-bottom:12px">Chaque lieu correspond à une étape du jeu. Vous pouvez en ajouter ou en supprimer.</p>
-        <div id="jdpLieuxList"></div>
-      </div>
-      <div id="jdpEnigmeEditor"></div>
-      <div class="card" style="margin-top:4px">
-        <div class="card-title">Parcours par équipe</div>
-        <p style="font-size:13px;color:var(--ink-muted);margin-bottom:12px">Numéros des étapes séparés par des virgules. Le nombre d'étapes suit la liste des lieux ci-dessus.</p>
-        <div id="jdpParcoursFields"></div>
-        <button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="jdpSaveParcours()">💾 Enregistrer les parcours</button>
-        <span class="save-msg" id="jdpParcoursSaveMsg">Sauvegardé ✓</span>
-      </div>
-    </div>
 
     <!-- Scoring -->
     <div id="jdpScoring" class="jdp-tab-page" style="display:none">
@@ -2971,35 +2951,7 @@ let jdpData = {
   lieux: [],   // [{id, nom, galet}]
   scoring: { score_depart:10, cout_indice:2, perte_temps:1, duree_max:10, score_epreuve:10 }
 };
-let jdpCurrentLieu = 0; // index dans jdpData.lieux
 
-// Lieux par défaut si rien en base
-const JDP_LIEUX_DEFAUT = [
-  {id:0,nom:'Blockhaus',galet:''},
-  {id:1,nom:'Écluse Saint-Marc',galet:''},
-  {id:2,nom:'Cabanes port du Plomb',galet:''},
-  {id:3,nom:'Pont levant',galet:''}
-];
-
-function jdpLoadLieux() {
-  try {
-    if (jdpData.config['jdp_lieux']) {
-      jdpData.lieux = JSON.parse(jdpData.config['jdp_lieux']);
-      return;
-    }
-  } catch(e) {}
-  // Fallback: reconstruire depuis les anciennes clés lieu_0..3
-  jdpData.lieux = JDP_LIEUX_DEFAUT.map(l => ({
-    ...l,
-    nom: jdpData.config['lieu_'+l.id] || l.nom,
-    galet: jdpData.config['galet_'+(l.id+1)] || ''
-  }));
-}
-
-async function jdpSaveLieux() {
-  jdpData.config['jdp_lieux'] = JSON.stringify(jdpData.lieux);
-  await db.from('jp_config').upsert({key:'jdp_lieux', value:jdpData.config['jdp_lieux']},{onConflict:'key'});
-}
 
 async function saveJdpEpreuve(epId) {
   const lieu   = document.getElementById('jdpEpLieu_'+epId)?.value.trim()||'';
@@ -3028,7 +2980,6 @@ async function jdpInit() {
   if(jdpData.config.jdp_perte_temps)  jdpData.scoring.perte_temps=parseInt(jdpData.config.jdp_perte_temps);
   if(jdpData.config.jdp_duree_max)    jdpData.scoring.duree_max=parseInt(jdpData.config.jdp_duree_max);
   if(jdpData.config.jdp_score_epreuve) jdpData.scoring.score_epreuve=parseInt(jdpData.config.jdp_score_epreuve);
-  jdpLoadLieux();
   jdpData.teamStates={};
   tsList.forEach(r=>{ jdpData.teamStates[r.equipe_nom]=r; });
   jdpSubscribeRealtime();
@@ -3057,7 +3008,6 @@ function jdpTab(name,btn) {
   btn.classList.add('active');
   if(name==='controle') renderJdpControle();
   if(name==='suivi')    renderJdpSuivi();
-  if(name==='enigmes')  renderJdpEnigmes();
   if(name==='scoring')  renderJdpScoring();
   if(name==='scores')   renderJdpScores();
 }
@@ -3172,168 +3122,6 @@ function renderJdpSuivi(){
 }
 
 // ---- Énigmes / Lieux ----
-function renderJdpEnigmes(){
-  renderJdpLieuxList();
-  renderJdpEnigmeEditor();
-  renderJdpParcours();
-}
-
-function renderJdpLieuxList(){
-  const el=document.getElementById('jdpLieuxList');
-  if(!el) return;
-  el.innerHTML=jdpData.lieux.map((l,i)=>`
-    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
-      <span style="font-size:13px;color:var(--ink-muted);min-width:20px">${i+1}</span>
-      <button onclick="jdpSelectLieu(${i})" style="flex:1;text-align:left;background:${jdpCurrentLieu===i?'var(--gold-light)':'transparent'};border:1px solid ${jdpCurrentLieu===i?'var(--gold)':'var(--border)'};border-radius:var(--radius-sm);padding:7px 12px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:${jdpCurrentLieu===i?'500':'400'};color:${jdpCurrentLieu===i?'var(--gold-dark)':'var(--ink)'};cursor:pointer">
-        ${l.nom}
-        ${l.galet?`<span style="font-size:11px;color:var(--ink-muted);margin-left:8px">🪨 ${l.galet}</span>`:'<span style="font-size:11px;color:var(--danger);margin-left:8px">⚠ pas de code galet</span>'}
-      </button>
-      <button onclick="jdpMoveLieu(${i},-1)" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 8px;cursor:pointer;color:var(--ink-muted);font-size:12px" ${i===0?'disabled':''}>↑</button>
-      <button onclick="jdpMoveLieu(${i},1)" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 8px;cursor:pointer;color:var(--ink-muted);font-size:12px" ${i===jdpData.lieux.length-1?'disabled':''}>↓</button>
-      <button onclick="jdpDeleteLieu(${i})" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:16px;padding:4px 6px" title="Supprimer">✕</button>
-    </div>`).join('');
-}
-
-function jdpSelectLieu(i){
-  jdpCurrentLieu=i;
-  renderJdpLieuxList();
-  renderJdpEnigmeEditor();
-}
-
-async function jdpAddLieu(){
-  const nom=prompt('Nom du nouveau lieu :');
-  if(!nom?.trim()) return;
-  const newId=Date.now(); // id unique
-  jdpData.lieux.push({id:newId, nom:nom.trim(), galet:''});
-  await jdpSaveLieux();
-  jdpCurrentLieu=jdpData.lieux.length-1;
-  renderJdpEnigmes();
-  showToast({icon:'📍',title:`"${nom.trim()}" ajouté`,duration:2500});
-}
-
-async function jdpDeleteLieu(i){
-  if(!confirm(`Supprimer le lieu "${jdpData.lieux[i].nom}" ? L'énigme associée sera perdue.`)) return;
-  jdpData.lieux.splice(i,1);
-  if(jdpCurrentLieu>=jdpData.lieux.length) jdpCurrentLieu=Math.max(0,jdpData.lieux.length-1);
-  await jdpSaveLieux();
-  renderJdpEnigmes();
-}
-
-async function jdpMoveLieu(i,dir){
-  const j=i+dir;
-  if(j<0||j>=jdpData.lieux.length) return;
-  [jdpData.lieux[i],jdpData.lieux[j]]=[jdpData.lieux[j],jdpData.lieux[i]];
-  if(jdpCurrentLieu===i) jdpCurrentLieu=j;
-  else if(jdpCurrentLieu===j) jdpCurrentLieu=i;
-  await jdpSaveLieux();
-  renderJdpEnigmes();
-}
-
-function renderJdpEnigmeEditor(){
-  const el=document.getElementById('jdpEnigmeEditor');
-  if(!el||!jdpData.lieux.length) { if(el) el.innerHTML=''; return; }
-  const l=jdpData.lieux[jdpCurrentLieu];
-  if(!l) return;
-  const lid=l.id;
-  const enigmeTxt=jdpData.config['enigme_'+lid]||'';
-  const NOMS_INDICES=['Indice 1','Indice 2','Indice 3','Indice 4','Indice 5','Indice 6 — Code'];
-
-  el.innerHTML=`<div class="card">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-      <div style="font-size:15px;font-weight:500;flex:1">✏️ Étape ${jdpCurrentLieu+1} — ${l.nom}</div>
-    </div>
-    <div class="divider"></div>
-    <div style="margin-bottom:14px">
-      <div class="field-label">Nom du lieu</div>
-      <input type="text" id="jdpLieuNom" value="${l.nom.replace(/"/g,'&quot;')}"
-        style="width:100%;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:14px">
-    </div>
-    <div style="margin-bottom:14px">
-      <div class="field-label">Code galet 🪨</div>
-      <input type="text" id="jdpLieuGalet" value="${(l.galet||'').replace(/"/g,'&quot;')}" placeholder="Ex : 7832"
-        style="width:140px;font-size:18px;text-align:center;letter-spacing:5px;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif">
-    </div>
-    <div style="margin-bottom:14px">
-      <div class="field-label">Énigme de départ</div>
-      <textarea id="jdpEnigmeTxt" placeholder="Texte de l'énigme…"
-        style="width:100%;min-height:80px;padding:9px 11px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'Playfair Display',serif;font-size:14px;font-style:italic;line-height:1.7;resize:vertical">${enigmeTxt.replace(/</g,'&lt;')}</textarea>
-    </div>
-    ${[0,1,2,3,4,5].map(k=>{
-      const txt=jdpData.config['indice_'+lid+'_'+k]||'';
-      const isLast=k===5;
-      return`<div style="margin-bottom:12px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-          <span class="field-label" style="margin:0;${isLast?'color:var(--gold-dark);font-weight:600':''}">${NOMS_INDICES[k]}</span>
-          ${isLast?'<span style="font-size:11px;background:var(--gold-light);color:var(--gold-dark);padding:1px 8px;border-radius:10px">donne le code directement</span>':'<span style="font-size:11px;color:var(--ink-muted)">débloqué après ${(k+1)*2} min</span>'}
-        </div>
-        <textarea id="jdpIndice_${k}" placeholder="${isLast?'Le code à trouver ou hint final…':'Texte indice '+(k+1)}"
-          style="width:100%;min-height:${isLast?'50':'55'}px;padding:9px 11px;border-radius:var(--radius-sm);border:1px solid ${isLast?'var(--gold)':'var(--border)'};background:${isLast?'var(--gold-light)':'var(--cream)'};color:var(--ink);font-family:'Playfair Display',serif;font-size:14px;font-style:italic;line-height:1.7;resize:vertical">${txt.replace(/</g,'&lt;')}</textarea>
-      </div>`;
-    }).join('')}
-    <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
-      <button class="btn btn-gold btn-sm" onclick="jdpSaveEnigme()">💾 Enregistrer cette étape</button>
-      <span class="save-msg" id="jdpEnigmeSaveMsg">Sauvegardé ✓</span>
-    </div>
-  </div>`;
-}
-
-async function jdpSaveEnigme(){
-  const l=jdpData.lieux[jdpCurrentLieu];
-  if(!l) return;
-  const lid=l.id;
-  l.nom=document.getElementById('jdpLieuNom')?.value.trim()||l.nom;
-  l.galet=document.getElementById('jdpLieuGalet')?.value.trim()||'';
-  const enigme=document.getElementById('jdpEnigmeTxt')?.value.trim()||'';
-  jdpData.config['enigme_'+lid]=enigme;
-  const updates=[
-    {key:'enigme_'+lid, value:enigme},
-    {key:'jdp_lieux',   value:JSON.stringify(jdpData.lieux)}
-  ];
-  for(let k=0;k<6;k++){
-    const txt=document.getElementById('jdpIndice_'+k)?.value.trim()||'';
-    jdpData.config['indice_'+lid+'_'+k]=txt;
-    updates.push({key:'indice_'+lid+'_'+k, value:txt});
-  }
-  await Promise.all(updates.map(u=>db.from('jp_config').upsert(u,{onConflict:'key'})));
-  showSaveMsg('jdpEnigmeSaveMsg');
-  showToast({icon:'✅',title:'Étape enregistrée',duration:2500});
-  renderJdpLieuxList();
-}
-
-function renderJdpParcours(){
-  const pf=document.getElementById('jdpParcoursFields');
-  if(!pf) return;
-  const nb=jdpData.lieux.length;
-  const legendNoms=jdpData.lieux.map((l,i)=>`${i+1}=${l.nom}`).join(' · ');
-  pf.innerHTML=`<p style="font-size:12px;color:var(--ink-muted);margin-bottom:10px">${legendNoms}</p>`+
-  appData.teams.map(t=>{
-    let p=jdpData.lieux.map((_,i)=>i+1);
-    try{ if(jdpData.config['parcours_'+t]) p=JSON.parse(jdpData.config['parcours_'+t]).map(x=>x+1); }catch(e){}
-    return`<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-      <span style="font-size:13px;min-width:160px;color:var(--ink-soft);font-weight:500">${t}</span>
-      <input type="text" id="jdpParcours_${t.replace(/\s/g,'_')}" value="${p.join(',')}"
-        placeholder="${jdpData.lieux.map((_,i)=>i+1).join(',')}" style="width:160px;font-size:14px;text-align:center;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif">
-    </div>`;
-  }).join('')||'<div class="notice">Aucune équipe.</div>';
-}
-
-async function jdpSaveParcours(){
-  const nb=jdpData.lieux.length;
-  const updates=[];
-  for(const t of appData.teams){
-    const el=document.getElementById('jdpParcours_'+t.replace(/\s/g,'_'));
-    if(!el) continue;
-    const arr=el.value.split(',').map(x=>parseInt(x.trim())-1).filter(x=>x>=0&&x<nb);
-    if(arr.length!==nb){ showToast({icon:'⚠️',title:`Parcours invalide pour ${t}`,msg:`Il faut ${nb} numéros de 1 à ${nb}.`,duration:4000}); return; }
-    const val=JSON.stringify(arr);
-    jdpData.config['parcours_'+t]=val;
-    updates.push(db.from('jp_config').upsert({key:'parcours_'+t,value:val},{onConflict:'key'}));
-  }
-  await Promise.all(updates);
-  showSaveMsg('jdpParcoursSaveMsg');
-  showToast({icon:'✅',title:'Parcours enregistrés',duration:2500});
-}
-
 // ---- Scoring ----
 function renderJdpScoring(){
   const s=jdpData.scoring;
