@@ -277,6 +277,7 @@ input[type=file]{display:none}
     <button class="nav-tab active" onclick="adminTab('equipes',this)">Équipes</button>
     <button class="nav-tab" onclick="adminTab('joueurs',this)">Joueurs</button>
     <button class="nav-tab" onclick="adminTab('epreuves',this)">Épreuves</button>
+    <button class="nav-tab" onclick="adminTab('etapes',this)">🧭 Étapes</button>
     <button class="nav-tab" onclick="adminTab('scores',this)">Scores</button>
     <div style="width:1px;background:var(--border);margin:8px 4px;flex-shrink:0"></div>
     <button class="nav-tab" onclick="adminTab('photos',this)">Photos <span class="notif-badge" id="adminPhotoBadge">0</span></button>
@@ -288,6 +289,17 @@ input[type=file]{display:none}
     <button class="nav-tab" onclick="adminTab('jdp',this)">🧭 Jeu de piste</button>
   </div>
   <div id="aEpreuves" class="page"><div class="ep-tabs" id="adminEpTabs"></div><div id="adminEpEditor"></div></div>
+  <div id="aEtapes" class="page">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card-title" style="margin:0">Étapes du jeu de piste</div>
+        <button class="btn btn-sm" onclick="addEtape()">+ Ajouter une étape</button>
+      </div>
+      <p style="font-size:13px;color:var(--ink-muted);margin-bottom:12px">Chaque étape mène les joueurs à un lieu via une énigme et des indices. Elle est associée à une épreuve dans le parcours de chaque équipe.</p>
+      <div id="etapesTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"></div>
+    </div>
+    <div id="etapeEditor"></div>
+  </div>
   <div id="aEquipes" class="page active">
     <div class="card">
       <div class="card-title">Équipes</div>
@@ -555,7 +567,7 @@ const SESSION_KEY='mc_wedding_session_v2';
 let currentRole=null,currentGMStation=null,currentGMTeam=null,currentPhotoTeam=null;
 let currentEpTab=1,pendingPhotoCount=0,gmRefusedCount=0;
 let challengeState={};
-let appData={teams:[],epreuves:[],scores:{},questions:{},joueurs:[],villesBac:{},anecdotes:[],jdpEpreuves:{},jdpOrdre:{}};
+let appData={teams:[],epreuves:[],scores:{},questions:{},joueurs:[],villesBac:{},anecdotes:[],jdpEpreuves:{},jdpOrdre:{},etapes:[]};
 let pins={admin:'1234',gm:{1:'5678',2:'5679',3:'5680',4:'5681'}};
 
 // ===================== SESSION =====================
@@ -614,7 +626,7 @@ async function init(){
         appData.locked[s.equipe_nom][s.epreuve_id]=s.locked||false;
       }
     });
-    // Charger config JDP épreuves et ordres
+    // Charger config JDP épreuves, étapes et ordres
     configRows.forEach(r=>{
       if(r.key.startsWith('jdp_ep_')){
         try{ const epId=parseInt(r.key.replace('jdp_ep_','')); appData.jdpEpreuves[epId]=JSON.parse(r.value); }catch(e){}
@@ -623,6 +635,17 @@ async function init(){
         try{ const team=r.key.replace('jdp_ordre_',''); appData.jdpOrdre[team]=JSON.parse(r.value); }catch(e){}
       }
     });
+    // Charger les étapes JDP
+    try {
+      const etapesRow = configRows.find(r=>r.key==='jdp_etapes');
+      if(etapesRow) appData.etapes = JSON.parse(etapesRow.value);
+    } catch(e) {}
+    if(!appData.etapes.length) appData.etapes = [
+      {id:1,nom:'Blockhaus',lieu:'',enigme:'',indices:['','','','','',''],code:''},
+      {id:2,nom:'Écluse Saint-Marc',lieu:'',enigme:'',indices:['','','','','',''],code:''},
+      {id:3,nom:'Cabanes port du Plomb',lieu:'',enigme:'',indices:['','','','','',''],code:''},
+      {id:4,nom:'Pont levant',lieu:'',enigme:'',indices:['','','','','',''],code:''}
+    ];
     configRows.forEach(r=>{
       if(r.key==='pin_admin') pins.admin=r.value;
       if(r.key==='pin_gm_1') pins.gm[1]=r.value;
@@ -900,7 +923,7 @@ function logout(){
 function adminTab(name,btn){
   document.querySelectorAll('#adminApp .page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('#adminNavTabs .nav-tab').forEach(b=>b.classList.remove('active'));
-  const map={epreuves:'aEpreuves',equipes:'aEquipes',joueurs:'aJoueurs',config:'aConfig',scores:'aScores',photos:'aPhotos',archive:'aArchive',petitbac:'aPetitBac',classement:'aClassement',reset:'aReset',jdp:'aJdp'};
+  const map={epreuves:'aEpreuves',etapes:'aEtapes',equipes:'aEquipes',joueurs:'aJoueurs',config:'aConfig',scores:'aScores',photos:'aPhotos',archive:'aArchive',petitbac:'aPetitBac',classement:'aClassement',reset:'aReset',jdp:'aJdp'};
   document.getElementById(map[name]).classList.add('active');btn.classList.add('active');
   if(name==='scores') renderAdminScores();
   if(name==='photos'){renderAdminPhotos();pendingPhotoCount=0;updateAdminPhotoBadge();}
@@ -908,6 +931,7 @@ function adminTab(name,btn){
   if(name==='petitbac') renderAdminPetitBac();
   if(name==='classement') renderLeaderboard('adminLeaderboard');
   if(name==='joueurs') renderJoueurs();
+  if(name==='etapes') renderEtapesTabs();
   if(name==='jdp') renderJdpControle();
 }
 function gmTab(name,btn){
@@ -1246,47 +1270,9 @@ function renderEpEditor(){
       </button>
     </div>`;
   }
-  // Section Jeu de piste
-  const jdpKey = 'jdp_ep_'+ep.id;
-  const jdpCfg = appData.jdpEpreuves[ep.id] || {};
-  const NOMS_IND = ['Indice 1','Indice 2','Indice 3','Indice 4','Indice 5','Indice 6 — Code'];
-  h+=`<div class="divider"></div>
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-    <span style="font-size:15px">🧭</span>
-    <span style="font-size:14px;font-weight:600;color:var(--gold-dark)">Jeu de piste — Accès à cette épreuve</span>
-  </div>
-  <div class="field"><div class="field-label">Nom du lieu</div>
-    <input type="text" id="jdpEpLieu_${ep.id}" value="${(jdpCfg.lieu||'').replace(/"/g,'&quot;')}" placeholder="Ex : Blockhaus, Port du Plomb..."
-      style="font-size:14px;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;width:100%">
-  </div>
-  <div class="field"><div class="field-label">Code à trouver sur place 🪨</div>
-    <input type="text" id="jdpEpCode_${ep.id}" value="${(jdpCfg.code||'').replace(/"/g,'&quot;')}" placeholder="Ex : 7832"
-      style="font-size:18px;text-align:center;letter-spacing:5px;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;width:140px">
-  </div>
-  <div class="field"><div class="field-label">Énigme de départ</div>
-    <textarea id="jdpEpEnigme_${ep.id}" placeholder="Ce que les joueurs reçoivent pour trouver ce lieu..."
-      style="width:100%;min-height:80px;padding:9px 11px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'Playfair Display',serif;font-size:14px;font-style:italic;line-height:1.7;resize:vertical">${(jdpCfg.enigme||'').replace(/</g,'&lt;')}</textarea>
-  </div>
-  ${(()=>{
-    let indHtml='';
-    const NOMS=['Indice 1','Indice 2','Indice 3','Indice 4','Indice 5','Indice 6 — Code'];
-    for(let k=0;k<6;k++){
-      const isLast=k===5;
-      const val=((jdpCfg.indices||[])[k]||'').replace(/</g,'&lt;');
-      const lbl=NOMS[k]+(isLast?' — donne le code directement':'');
-      const lblStyle=isLast?'color:var(--amber);font-weight:600':'';
-      const bdr=isLast?'var(--gold)':'var(--border)';
-      const bg=isLast?'var(--gold-light)':'var(--cream)';
-      const ph=isLast?'Texte révélant le code...':'Texte indice '+(k+1)+'...';
-      indHtml+='<div class="field"><div class="field-label" style="'+lblStyle+'">'+lbl+'</div>';
-      indHtml+='<textarea id="jdpEpIndice_'+ep.id+'_'+k+'" placeholder="'+ph+'"';
-      indHtml+=' style="width:100%;min-height:55px;padding:9px 11px;border-radius:var(--radius-sm);border:1px solid '+bdr+';background:'+bg+';color:var(--ink);font-family:Playfair Display,serif;font-size:14px;font-style:italic;line-height:1.7;resize:vertical">'+val+'</textarea></div>';
-    }
-    return indHtml;
-  })()}`;
+
   h+=`<div class="divider"></div><div style="display:flex;align-items:center;gap:10px">
-    <button class="btn btn-gold" onclick="${ep.type==='villes'?'saveVillesBacAndEpreuve()':ep.type==='qcm'?'saveAnecdotesAndEpreuve()':'saveEpreuve()'}">Enregistrer épreuve</button>
-    <button class="btn btn-sm" onclick="saveJdpEpreuve(${ep.id})" style="border-color:var(--gold-dark);color:var(--gold-dark)">🧭 Enregistrer jeu de piste</button>
+    <button class="btn btn-gold" onclick="${ep.type==='villes'?'saveVillesBacAndEpreuve()':ep.type==='qcm'?'saveAnecdotesAndEpreuve()':'saveEpreuve()'}">💾 Enregistrer</button>
     <span class="save-msg" id="epSaveMsg">Sauvegardé ✓</span>
   </div></div>`;
   document.getElementById('adminEpEditor').innerHTML=h;
@@ -1377,39 +1363,104 @@ async function saveEpreuve(){
 }
 
 // ===================== ADMIN: EQUIPES =====================
-function renderOrdreEpreuves(teamName) {
-  const ordre = appData.jdpOrdre[teamName] || appData.epreuves.map(e=>e.id);
-  return ordre.map((epId, k) => {
-    const ep = appData.epreuves.find(e=>e.id===epId);
-    const jdp = appData.jdpEpreuves[epId] || {};
-    const tenc = encodeURIComponent(teamName);
-    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--cream);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:5px">
-      <span style="font-size:12px;color:var(--ink-muted);min-width:16px;text-align:center;font-weight:600">${k+1}</span>
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:500;color:var(--ink)">${ep?ep.title:'Épreuve inconnue'}</div>
-        ${jdp.lieu?`<div style="font-size:11px;color:var(--ink-muted)">📍 ${jdp.lieu}</div>`:'<div style="font-size:11px;color:var(--danger)">⚠ Lieu non configuré</div>'}
+// parcours = [{delai:30, etapeId:1, epreuveId:2}, ...]
+function getParcours(teamName) {
+  if (appData.jdpOrdre[teamName]?.length && typeof appData.jdpOrdre[teamName][0] === 'object') {
+    return appData.jdpOrdre[teamName];
+  }
+  // Fallback ancienne structure (tableau d'ids épreuves)
+  const ids = appData.jdpOrdre[teamName] || appData.epreuves.map(e=>e.id);
+  return ids.map((epId,i) => ({ delai:0, etapeId: appData.etapes[i]?.id||null, epreuveId:epId }));
+}
+
+function renderParcours(teamName) {
+  const parcours = getParcours(teamName);
+  const tenc = encodeURIComponent(teamName);
+  if (!parcours.length) return `<div style="font-size:13px;color:var(--ink-muted);font-style:italic">Aucun bloc — cliquez + Ajouter</div>`;
+  return parcours.map((bloc, k) => {
+    const etape   = appData.etapes.find(e=>e.id===bloc.etapeId);
+    const epreuve = appData.epreuves.find(e=>e.id===bloc.epreuveId);
+    return `<div style="background:var(--cream);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+        <span style="font-size:12px;font-weight:700;color:var(--gold-dark);min-width:18px">${k+1}</span>
+        <span style="flex:1;font-size:12px;font-weight:600;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.4px">Bloc ${k+1}</span>
+        <button onclick="moveParcours('${tenc}',${k},-1)" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 7px;cursor:pointer;color:var(--ink-muted);font-size:11px" ${k===0?'disabled':''}>↑</button>
+        <button onclick="moveParcours('${tenc}',${k},1)" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 7px;cursor:pointer;color:var(--ink-muted);font-size:11px" ${k===parcours.length-1?'disabled':''}>↓</button>
+        <button onclick="removeBloc('${tenc}',${k})" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:14px;padding:2px 5px">✕</button>
       </div>
-      <button onclick="moveOrdreEpreuve('${tenc}',${k},-1)" style="background:none;border:1px solid var(--border);border-radius:4px;padding:3px 8px;cursor:pointer;color:var(--ink-muted);font-size:11px;line-height:1" ${k===0?'disabled':''}>↑</button>
-      <button onclick="moveOrdreEpreuve('${tenc}',${k},1)" style="background:none;border:1px solid var(--border);border-radius:4px;padding:3px 8px;cursor:pointer;color:var(--ink-muted);font-size:11px;line-height:1" ${k===ordre.length-1?'disabled':''}>↓</button>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+        <span style="font-size:11px;color:var(--ink-muted);min-width:60px">⏱ Attente</span>
+        <input type="number" min="0" value="${bloc.delai||0}"
+          onchange="updateBlocDelai('${tenc}',${k},this.value)"
+          style="width:70px;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
+        <span style="font-size:11px;color:var(--ink-muted)">secondes avant l'étape</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+        <span style="font-size:11px;color:var(--ink-muted);min-width:60px">🧭 Étape</span>
+        <select onchange="updateBlocEtape('${tenc}',${k},this.value)"
+          style="flex:1;padding:6px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
+          <option value="">— Choisir une étape —</option>
+          ${appData.etapes.map(e=>`<option value="${e.id}" ${e.id===bloc.etapeId?'selected':''}>${e.nom}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span style="font-size:11px;color:var(--ink-muted);min-width:60px">🎯 Épreuve</span>
+        <select onchange="updateBlocEpreuve('${tenc}',${k},this.value)"
+          style="flex:1;padding:6px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
+          <option value="">— Choisir une épreuve —</option>
+          ${appData.epreuves.map(e=>`<option value="${e.id}" ${e.id===bloc.epreuveId?'selected':''}>${e.title}</option>`).join('')}
+        </select>
+      </div>
     </div>`;
   }).join('');
 }
 
-function moveOrdreEpreuve(teamEnc, k, dir) {
-  const teamName = decodeURIComponent(teamEnc);
-  const ordre = appData.jdpOrdre[teamName] || appData.epreuves.map(e=>e.id);
-  const j = k + dir;
-  if (j < 0 || j >= ordre.length) return;
-  [ordre[k], ordre[j]] = [ordre[j], ordre[k]];
-  appData.jdpOrdre[teamName] = ordre;
-  // Re-render juste la liste de cette équipe
-  const teamIdx = appData.teams.indexOf(teamName);
-  const el = document.getElementById('ordreList_'+teamIdx);
-  if (el) el.innerHTML = renderOrdreEpreuves(teamName);
+function updateBlocDelai(tenc, k, val) {
+  const t = decodeURIComponent(tenc);
+  const p = getParcours(t); p[k].delai = parseInt(val)||0;
+  appData.jdpOrdre[t] = p;
+}
+function updateBlocEtape(tenc, k, val) {
+  const t = decodeURIComponent(tenc);
+  const p = getParcours(t); p[k].etapeId = val ? parseInt(val) : null;
+  appData.jdpOrdre[t] = p;
+}
+function updateBlocEpreuve(tenc, k, val) {
+  const t = decodeURIComponent(tenc);
+  const p = getParcours(t); p[k].epreuveId = val ? parseInt(val) : null;
+  appData.jdpOrdre[t] = p;
+}
+function moveParcours(tenc, k, dir) {
+  const t = decodeURIComponent(tenc);
+  const p = getParcours(t); const j = k+dir;
+  if (j<0||j>=p.length) return;
+  [p[k],p[j]]=[p[j],p[k]];
+  appData.jdpOrdre[t] = p;
+  const ti = appData.teams.indexOf(t);
+  const el = document.getElementById('parcoursBlocs_'+ti);
+  if (el) el.innerHTML = renderParcours(t);
+}
+function removeBloc(tenc, k) {
+  const t = decodeURIComponent(tenc);
+  const p = getParcours(t); p.splice(k,1);
+  appData.jdpOrdre[t] = p;
+  const ti = appData.teams.indexOf(t);
+  const el = document.getElementById('parcoursBlocs_'+ti);
+  if (el) el.innerHTML = renderParcours(t);
+}
+function addBloc(tenc) {
+  const t = decodeURIComponent(tenc);
+  const p = getParcours(t);
+  p.push({delai:0, etapeId:null, epreuveId:null});
+  appData.jdpOrdre[t] = p;
+  const ti = appData.teams.indexOf(t);
+  const el = document.getElementById('parcoursBlocs_'+ti);
+  if (el) el.innerHTML = renderParcours(t);
 }
 
 function renderTeamFields(){
   document.getElementById('teamNameFields').innerHTML=appData.teams.map((t,i)=>{
+    const tenc = encodeURIComponent(t);
     return `
     <div style="background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
@@ -1419,8 +1470,11 @@ function renderTeamFields(){
         <button onclick="deleteTeam(${i})" title="Supprimer"
           style="background:none;border:none;color:var(--danger);font-size:16px;cursor:pointer;padding:4px 6px;line-height:1">✕</button>
       </div>
-      <div style="font-size:11px;font-weight:600;color:var(--gold-dark);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">🧭 Ordre de passage des épreuves</div>
-      <div id="ordreList_${i}">${renderOrdreEpreuves(t)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:11px;font-weight:600;color:var(--gold-dark);text-transform:uppercase;letter-spacing:.4px">🧭 Parcours — Étapes &amp; Épreuves</div>
+        <button class="btn btn-sm" onclick="addBloc('${tenc}')" style="font-size:11px;padding:4px 10px">+ Ajouter un bloc</button>
+      </div>
+      <div id="parcoursBlocs_${i}">${renderParcours(t)}</div>
     </div>`;
   }).join('');
 }
@@ -2956,6 +3010,114 @@ let jdpData = {
   scoring: { score_depart:10, cout_indice:2, perte_temps:1, duree_max:10, score_epreuve:10 }
 };
 
+
+// ===================== ADMIN: ÉTAPES JDP =====================
+let currentEtapeIdx = 0;
+
+async function saveEtapes() {
+  await db.from('jp_config').upsert({key:'jdp_etapes', value:JSON.stringify(appData.etapes)},{onConflict:'key'});
+}
+
+function renderEtapesTabs() {
+  const el = document.getElementById('etapesTabs');
+  if (!el) return;
+  el.innerHTML = appData.etapes.map((e,i) =>
+    `<button class="ep-tab${i===currentEtapeIdx?' active':''}" onclick="selectEtape(${i},this)">${e.nom||'Étape '+(i+1)}</button>`
+  ).join('') + `<button class="ep-tab" onclick="addEtape(this)" style="color:var(--gold-dark)">+ Ajouter</button>`;
+  renderEtapeEditor();
+}
+
+function selectEtape(i, btn) {
+  currentEtapeIdx = i;
+  document.querySelectorAll('#etapesTabs .ep-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderEtapeEditor();
+}
+
+function addEtape() {
+  const newId = Date.now();
+  appData.etapes.push({id:newId, nom:'Nouvelle étape', lieu:'', enigme:'', indices:['','','','','',''], code:''});
+  currentEtapeIdx = appData.etapes.length - 1;
+  renderEtapesTabs();
+}
+
+function renderEtapeEditor() {
+  const el = document.getElementById('etapeEditor');
+  if (!el || !appData.etapes.length) { if(el) el.innerHTML=''; return; }
+  const e = appData.etapes[currentEtapeIdx];
+  if (!e) return;
+  const NOMS = ['Indice 1','Indice 2','Indice 3','Indice 4','Indice 5','Indice 6 — Code'];
+  let indHtml = '';
+  for (let k=0; k<6; k++) {
+    const isLast = k===5;
+    const val = (e.indices[k]||'').replace(/</g,'&lt;');
+    const lbl = NOMS[k] + (isLast?' — révèle le code directement':'');
+    const bdr = isLast ? 'var(--gold)' : 'var(--border)';
+    const bg  = isLast ? 'var(--gold-light)' : 'var(--cream)';
+    const ph  = isLast ? 'Texte révélant le code...' : 'Texte indice '+(k+1)+'...';
+    const lblStyle = isLast ? 'color:var(--amber);font-weight:600' : '';
+    indHtml += `<div class="field">
+      <div class="field-label" style="${lblStyle}">${lbl}</div>
+      <textarea id="etIndice_${k}" placeholder="${ph}"
+        style="width:100%;min-height:55px;padding:9px 11px;border-radius:var(--radius-sm);border:1px solid ${bdr};background:${bg};color:var(--ink);font-family:'Playfair Display',serif;font-size:14px;font-style:italic;line-height:1.7;resize:vertical">${val}</textarea>
+    </div>`;
+  }
+  el.innerHTML = `<div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:15px;font-weight:500">Étape ${currentEtapeIdx+1}</div>
+      <button onclick="deleteEtape(${currentEtapeIdx})" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:13px;padding:4px 8px;border:1px solid var(--danger);border-radius:var(--radius-pill)">Supprimer</button>
+    </div>
+    <div class="field">
+      <div class="field-label">Nom de l'étape</div>
+      <input type="text" id="etNom" value="${(e.nom||'').replace(/"/g,'&quot;')}" placeholder="Ex : Blockhaus"
+        style="width:100%;font-size:14px;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif">
+    </div>
+    <div class="field">
+      <div class="field-label">Lieu (description)</div>
+      <input type="text" id="etLieu" value="${(e.lieu||'').replace(/"/g,'&quot;')}" placeholder="Ex : Sur la falaise, face à l'île de Ré"
+        style="width:100%;font-size:14px;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif">
+    </div>
+    <div class="field">
+      <div class="field-label">Code à trouver sur place 🪨</div>
+      <input type="text" id="etCode" value="${(e.code||'').replace(/"/g,'&quot;')}" placeholder="Ex : 7832"
+        style="font-size:20px;text-align:center;letter-spacing:6px;padding:9px 12px;border-radius:var(--radius-sm);border:2px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;width:160px">
+    </div>
+    <div class="divider"></div>
+    <div class="field">
+      <div class="field-label">Énigme de départ</div>
+      <textarea id="etEnigme" placeholder="Ce que les joueurs reçoivent pour trouver ce lieu..."
+        style="width:100%;min-height:80px;padding:9px 11px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'Playfair Display',serif;font-size:14px;font-style:italic;line-height:1.7;resize:vertical">${(e.enigme||'').replace(/</g,'&lt;')}</textarea>
+    </div>
+    ${indHtml}
+    <div class="divider"></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="btn btn-gold" onclick="saveEtapeEditor()">💾 Enregistrer cette étape</button>
+      <span class="save-msg" id="etapeSaveMsg">Sauvegardé ✓</span>
+    </div>
+  </div>`;
+}
+
+async function saveEtapeEditor() {
+  const e = appData.etapes[currentEtapeIdx];
+  if (!e) return;
+  e.nom    = document.getElementById('etNom')?.value.trim() || e.nom;
+  e.lieu   = document.getElementById('etLieu')?.value.trim() || '';
+  e.code   = document.getElementById('etCode')?.value.trim() || '';
+  e.enigme = document.getElementById('etEnigme')?.value.trim() || '';
+  e.indices = [0,1,2,3,4,5].map(k => document.getElementById('etIndice_'+k)?.value.trim()||'');
+  await saveEtapes();
+  showSaveMsg('etapeSaveMsg');
+  showToast({icon:'✅', title:'Étape enregistrée', duration:2500});
+  renderEtapesTabs();
+}
+
+async function deleteEtape(i) {
+  if (!confirm(`Supprimer l'étape "${appData.etapes[i].nom}" ?`)) return;
+  appData.etapes.splice(i, 1);
+  currentEtapeIdx = Math.max(0, currentEtapeIdx-1);
+  await saveEtapes();
+  renderEtapesTabs();
+}
 
 async function saveJdpEpreuve(epId) {
   const lieu   = document.getElementById('jdpEpLieu_'+epId)?.value.trim()||'';
