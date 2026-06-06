@@ -575,7 +575,7 @@ const SESSION_KEY='mc_wedding_session_v2';
 let currentRole=null,currentGMStation=null,currentGMTeam=null,currentPhotoTeam=null;
 let currentEpTab=1,pendingPhotoCount=0,gmRefusedCount=0;
 let challengeState={};
-let appData={teams:[],epreuves:[],scores:{},questions:{},joueurs:[],villesBac:{},anecdotes:[]};
+let appData={teams:[],epreuves:[],scores:{},questions:{},joueurs:[],villesBac:{},anecdotes:[],jdpEpreuves:{},jdpOrdre:{}};
 let pins={admin:'1234',gm:{1:'5678',2:'5679',3:'5680',4:'5681'}};
 
 // ===================== SESSION =====================
@@ -632,6 +632,15 @@ async function init(){
       if(appData.scores[s.equipe_nom]){
         appData.scores[s.equipe_nom][s.epreuve_id]=s.score;
         appData.locked[s.equipe_nom][s.epreuve_id]=s.locked||false;
+      }
+    });
+    // Charger config JDP épreuves et ordres
+    configRows.forEach(r=>{
+      if(r.key.startsWith('jdp_ep_')){
+        try{ const epId=parseInt(r.key.replace('jdp_ep_','')); appData.jdpEpreuves[epId]=JSON.parse(r.value); }catch(e){}
+      }
+      if(r.key.startsWith('jdp_ordre_')){
+        try{ const team=r.key.replace('jdp_ordre_',''); appData.jdpOrdre[team]=JSON.parse(r.value); }catch(e){}
       }
     });
     configRows.forEach(r=>{
@@ -1257,8 +1266,47 @@ function renderEpEditor(){
       </button>
     </div>`;
   }
+  // Section Jeu de piste
+  const jdpKey = 'jdp_ep_'+ep.id;
+  const jdpCfg = appData.jdpEpreuves[ep.id] || {};
+  const NOMS_IND = ['Indice 1','Indice 2','Indice 3','Indice 4','Indice 5','Indice 6 — Code'];
+  h+=`<div class="divider"></div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+    <span style="font-size:15px">🧭</span>
+    <span style="font-size:14px;font-weight:600;color:var(--gold-dark)">Jeu de piste — Accès à cette épreuve</span>
+  </div>
+  <div class="field"><div class="field-label">Nom du lieu</div>
+    <input type="text" id="jdpEpLieu_${ep.id}" value="${(jdpCfg.lieu||'').replace(/"/g,'&quot;')}" placeholder="Ex : Blockhaus, Port du Plomb..."
+      style="font-size:14px;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;width:100%">
+  </div>
+  <div class="field"><div class="field-label">Code à trouver sur place 🪨</div>
+    <input type="text" id="jdpEpCode_${ep.id}" value="${(jdpCfg.code||'').replace(/"/g,'&quot;')}" placeholder="Ex : 7832"
+      style="font-size:18px;text-align:center;letter-spacing:5px;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;width:140px">
+  </div>
+  <div class="field"><div class="field-label">Énigme de départ</div>
+    <textarea id="jdpEpEnigme_${ep.id}" placeholder="Ce que les joueurs reçoivent pour trouver ce lieu..."
+      style="width:100%;min-height:80px;padding:9px 11px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'Playfair Display',serif;font-size:14px;font-style:italic;line-height:1.7;resize:vertical">${(jdpCfg.enigme||'').replace(/</g,'&lt;')}</textarea>
+  </div>
+  ${(()=>{
+    let indHtml='';
+    const NOMS=['Indice 1','Indice 2','Indice 3','Indice 4','Indice 5','Indice 6 — Code'];
+    for(let k=0;k<6;k++){
+      const isLast=k===5;
+      const val=((jdpCfg.indices||[])[k]||'').replace(/</g,'&lt;');
+      const lbl=NOMS[k]+(isLast?' — donne le code directement':'');
+      const lblStyle=isLast?'color:var(--amber);font-weight:600':'';
+      const bdr=isLast?'var(--gold)':'var(--border)';
+      const bg=isLast?'var(--gold-light)':'var(--cream)';
+      const ph=isLast?'Texte révélant le code...':'Texte indice '+(k+1)+'...';
+      indHtml+='<div class="field"><div class="field-label" style="'+lblStyle+'">'+lbl+'</div>';
+      indHtml+='<textarea id="jdpEpIndice_'+ep.id+'_'+k+'" placeholder="'+ph+'"';
+      indHtml+=' style="width:100%;min-height:55px;padding:9px 11px;border-radius:var(--radius-sm);border:1px solid '+bdr+';background:'+bg+';color:var(--ink);font-family:Playfair Display,serif;font-size:14px;font-style:italic;line-height:1.7;resize:vertical">'+val+'</textarea></div>';
+    }
+    return indHtml;
+  })()}`;
   h+=`<div class="divider"></div><div style="display:flex;align-items:center;gap:10px">
-    <button class="btn btn-gold" onclick="${ep.type==='villes'?'saveVillesBacAndEpreuve()':ep.type==='qcm'?'saveAnecdotesAndEpreuve()':'saveEpreuve()'}">Enregistrer</button>
+    <button class="btn btn-gold" onclick="${ep.type==='villes'?'saveVillesBacAndEpreuve()':ep.type==='qcm'?'saveAnecdotesAndEpreuve()':'saveEpreuve()'}">Enregistrer épreuve</button>
+    <button class="btn btn-sm" onclick="saveJdpEpreuve(${ep.id})" style="border-color:var(--gold-dark);color:var(--gold-dark)">🧭 Enregistrer jeu de piste</button>
     <span class="save-msg" id="epSaveMsg">Sauvegardé ✓</span>
   </div></div>`;
   document.getElementById('adminEpEditor').innerHTML=h;
@@ -1350,14 +1398,44 @@ async function saveEpreuve(){
 
 // ===================== ADMIN: EQUIPES =====================
 function renderTeamFields(){
-  document.getElementById('teamNameFields').innerHTML=appData.teams.map((t,i)=>`
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-      <span style="font-size:12px;color:var(--ink-muted);min-width:20px;text-align:right">${i+1}</span>
-      <input type="text" class="admin-input" value="${t}" id="tname${i}" placeholder="Nom de l'équipe"
-        style="flex:1;font-size:14px;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif">
-      <button onclick="deleteTeam(${i})" title="Supprimer"
-        style="background:none;border:none;color:var(--danger);font-size:16px;cursor:pointer;padding:4px 6px;line-height:1">✕</button>
-    </div>`).join('');
+  const epNames = appData.epreuves.map(e=>e.title);
+  document.getElementById('teamNameFields').innerHTML=appData.teams.map((t,i)=>{
+    // Ordre de passage : tableau d'ids d'épreuves
+    const ordre = appData.jdpOrdre[t] || appData.epreuves.map(e=>e.id);
+    const ordreStr = ordre.join(',');
+    return `
+    <div style="background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+        <span style="font-size:12px;color:var(--ink-muted);min-width:20px;text-align:right">${i+1}</span>
+        <input type="text" class="admin-input" value="${t}" id="tname${i}" placeholder="Nom de l'équipe"
+          style="flex:1;font-size:14px;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif">
+        <button onclick="deleteTeam(${i})" title="Supprimer"
+          style="background:none;border:none;color:var(--danger);font-size:16px;cursor:pointer;padding:4px 6px;line-height:1">✕</button>
+      </div>
+      <div style="font-size:11px;font-weight:600;color:var(--gold-dark);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">🧭 Ordre de passage des épreuves</div>
+      <div style="font-size:11px;color:var(--ink-muted);margin-bottom:8px">IDs des épreuves séparés par des virgules. ${appData.epreuves.map(e=>`${e.id}=${e.title}`).join(' · ')}</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="jdpOrdre_${i}" value="${ordreStr}" placeholder="${appData.epreuves.map(e=>e.id).join(',')}"
+          style="flex:1;font-size:13px;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;letter-spacing:1px">
+        <button class="btn btn-sm" onclick="previewOrdre(${i})" style="white-space:nowrap;font-size:12px">👁 Aperçu</button>
+      </div>
+      <div id="ordrePreview_${i}" style="font-size:12px;color:var(--ink-muted);margin-top:6px;line-height:1.6;display:none"></div>
+    </div>`;
+  }).join('');
+}
+
+function previewOrdre(i){
+  const el = document.getElementById('jdpOrdre_'+i);
+  const prev = document.getElementById('ordrePreview_'+i);
+  if (!el||!prev) return;
+  const ids = el.value.split(',').map(x=>parseInt(x.trim())).filter(x=>!isNaN(x));
+  const lines = ids.map((id,k)=>{
+    const ep = appData.epreuves.find(e=>e.id===id);
+    const jdp = appData.jdpEpreuves[id];
+    return `${k+1}. <strong>${ep?ep.title:'?'}</strong>${jdp?.lieu?' — '+jdp.lieu:''}`;
+  });
+  prev.innerHTML = lines.join('<br>');
+  prev.style.display = 'block';
 }
 
 async function saveTeams(){
@@ -1375,6 +1453,15 @@ async function saveTeams(){
     appData.joueurs.forEach(j=>{if(j.equipe_nom===oldName)j.equipe_nom=newName;});
   }
   appData.teams=newTeams;
+  // Sauvegarder les ordres de passage JDP
+  for(let i=0;i<appData.teams.length;i++){
+    const el=document.getElementById('jdpOrdre_'+i);
+    if(!el) continue;
+    const t=appData.teams[i];
+    const ids=el.value.split(',').map(x=>parseInt(x.trim())).filter(x=>!isNaN(x));
+    appData.jdpOrdre[t]=ids;
+    await db.from('jp_config').upsert({key:'jdp_ordre_'+t,value:JSON.stringify(ids)},{onConflict:'key'});
+  }
   renderTeamFields();renderJoueurs();renderAdminScores();
   showSaveMsg('teamSaveMsg');
 }
@@ -2912,6 +2999,18 @@ function jdpLoadLieux() {
 async function jdpSaveLieux() {
   jdpData.config['jdp_lieux'] = JSON.stringify(jdpData.lieux);
   await db.from('jp_config').upsert({key:'jdp_lieux', value:jdpData.config['jdp_lieux']},{onConflict:'key'});
+}
+
+async function saveJdpEpreuve(epId) {
+  const lieu   = document.getElementById('jdpEpLieu_'+epId)?.value.trim()||'';
+  const code   = document.getElementById('jdpEpCode_'+epId)?.value.trim()||'';
+  const enigme = document.getElementById('jdpEpEnigme_'+epId)?.value.trim()||'';
+  const indices= [0,1,2,3,4,5].map(k=>document.getElementById('jdpEpIndice_'+epId+'_'+k)?.value.trim()||'');
+  const data   = { lieu, code, enigme, indices };
+  appData.jdpEpreuves[epId] = data;
+  await db.from('jp_config').upsert({key:'jdp_ep_'+epId, value:JSON.stringify(data)},{onConflict:'key'});
+  showSaveMsg('epSaveMsg');
+  showToast({icon:'🧭',title:'Jeu de piste enregistré',duration:2500});
 }
 
 async function jdpInit() {
