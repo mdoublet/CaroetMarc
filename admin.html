@@ -628,9 +628,6 @@ async function init(){
     });
     // Charger config JDP épreuves, étapes et ordres
     configRows.forEach(r=>{
-      if(r.key.startsWith('jdp_ep_')){
-        try{ const epId=parseInt(r.key.replace('jdp_ep_','')); appData.jdpEpreuves[epId]=JSON.parse(r.value); }catch(e){}
-      }
       if(r.key.startsWith('jdp_ordre_')){
         try{ const team=r.key.replace('jdp_ordre_',''); appData.jdpOrdre[team]=JSON.parse(r.value); }catch(e){}
       }
@@ -641,10 +638,10 @@ async function init(){
       if(etapesRow) appData.etapes = JSON.parse(etapesRow.value);
     } catch(e) {}
     if(!appData.etapes.length) appData.etapes = [
-      {id:1,nom:'Blockhaus',lieu:'',enigme:'',indices:['','','','','',''],code:''},
-      {id:2,nom:'Écluse Saint-Marc',lieu:'',enigme:'',indices:['','','','','',''],code:''},
-      {id:3,nom:'Cabanes port du Plomb',lieu:'',enigme:'',indices:['','','','','',''],code:''},
-      {id:4,nom:'Pont levant',lieu:'',enigme:'',indices:['','','','','',''],code:''}
+      {id:0,nom:'Blockhaus',lieu:'',enigme:'',indices:['','','','','',''],code:''},
+      {id:1,nom:'Écluse Saint-Marc',lieu:'',enigme:'',indices:['','','','','',''],code:''},
+      {id:2,nom:'Cabanes port du Plomb',lieu:'',enigme:'',indices:['','','','','',''],code:''},
+      {id:3,nom:'Pont levant',lieu:'',enigme:'',indices:['','','','','',''],code:''}
     ];
     configRows.forEach(r=>{
       if(r.key==='pin_admin') pins.admin=r.value;
@@ -661,7 +658,13 @@ async function init(){
 
   // Init jeu de piste (erreurs isolées pour ne pas bloquer le loader)
   console.log('⏳ jdpInit() start');
-  try { await jdpInit(); console.log('✅ jdpInit() done'); } catch(e) { console.error('jdpInit error:', e); }
+  try {
+    await Promise.race([
+      jdpInit(),
+      new Promise((_,reject) => setTimeout(()=>reject(new Error('jdpInit timeout')), 5000))
+    ]);
+    console.log('✅ jdpInit() done');
+  } catch(e) { console.error('jdpInit error/timeout:', e); }
 
   console.log('✅ Cache loader');
   document.getElementById('globalLoader').style.display='none';
