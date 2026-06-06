@@ -3149,6 +3149,26 @@ async function jdpInit() {
   if(jdpData.config.jdp_perte_temps)  jdpData.scoring.perte_temps=parseInt(jdpData.config.jdp_perte_temps);
   if(jdpData.config.jdp_duree_max)    jdpData.scoring.duree_max=parseInt(jdpData.config.jdp_duree_max);
   if(jdpData.config.jdp_score_epreuve) jdpData.scoring.score_epreuve=parseInt(jdpData.config.jdp_score_epreuve);
+
+  // Charger les étapes depuis jp_config
+  try {
+    const etapesRow = config.find(r=>r.key==='jdp_etapes');
+    if(etapesRow) appData.etapes = JSON.parse(etapesRow.value);
+  } catch(e) { console.error('Erreur chargement étapes:', e); }
+  if(!appData.etapes.length) appData.etapes=[
+    {id:0,nom:'Blockhaus',lieu:'',enigme:'',indices:['','','','','',''],code:''},
+    {id:1,nom:'Écluse Saint-Marc',lieu:'',enigme:'',indices:['','','','','',''],code:''},
+    {id:2,nom:'Cabanes port du Plomb',lieu:'',enigme:'',indices:['','','','','',''],code:''},
+    {id:3,nom:'Pont levant',lieu:'',enigme:'',indices:['','','','','',''],code:''}
+  ];
+
+  // Charger les ordres de parcours depuis jp_config
+  config.forEach(r=>{
+    if(r.key.startsWith('jdp_ordre_')){
+      try{ appData.jdpOrdre[r.key.replace('jdp_ordre_','')]=JSON.parse(r.value); }catch(e){}
+    }
+  });
+
   jdpData.teamStates={};
   tsList.forEach(r=>{ jdpData.teamStates[r.equipe_nom]=r; });
   jdpSubscribeRealtime();
