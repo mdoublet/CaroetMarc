@@ -1379,41 +1379,113 @@ async function saveEpreuve(){
 // ===================== ADMIN: EQUIPES =====================
 // parcours = [{delai:30, etapeId:1, epreuveId:2}, ...]
 function getParcours(teamName) {
+  let p;
   if (appData.jdpOrdre[teamName]?.length && typeof appData.jdpOrdre[teamName][0] === 'object') {
-    return appData.jdpOrdre[teamName];
+    p = appData.jdpOrdre[teamName];
+  } else {
+    const ids = appData.jdpOrdre[teamName] || appData.epreuves.map(e=>e.id);
+    p = ids.map((epId,i) => ({ delai:0, etapeId: appData.etapes[i]?.id||null, epreuveId:epId }));
   }
-  // Fallback ancienne structure (tableau d'ids épreuves)
-  const ids = appData.jdpOrdre[teamName] || appData.epreuves.map(e=>e.id);
-  return ids.map((epId,i) => ({ delai:0, etapeId: appData.etapes[i]?.id||null, epreuveId:epId }));
+  // Normaliser : ajouter champs manquants
+  return p.map(b => ({
+    delai: b.delai||0,
+    etapeId: b.etapeId||null,
+    dureeEtape: b.dureeEtape||600,
+    dureeRegles: b.dureeRegles||120,
+    dureeEpreuve: b.dureeEpreuve||600,
+    epreuveId: b.epreuveId||null
+  }));
+}
+
+function fmtSec(s) {
+  const m = Math.floor(s/60), sec = s%60;
+  return `${m}:${String(sec).padStart(2,'0')}`;
+}
+
+function buildTimeline(parcours) {
+  // Calcule les offsets de chaque phase depuis H=0
+  let t = 0;
+  const events = [];
+  parcours.forEach((bloc, k) => {
+    const delai = bloc.delai||0;
+    const dureeEtape = bloc.dureeEtape||600;
+    const dureeRegles = bloc.dureeRegles||120;
+    const dureeEpreuve = bloc.dureeEpreuve||600;
+    if (delai > 0) { events.push({t, label:`Attente ${k+1}`, dur:delai, color:'#B8D0D8', type:'delai'}); t+=delai; }
+    events.push({t, label:`Étape ${k+1}`, dur:dureeEtape, color:'#1E6A7A', type:'etape'}); t+=dureeEtape;
+    events.push({t, label:`Règles ${k+1}`, dur:dureeRegles, color:'#5A7D87', type:'regles'}); t+=dureeRegles;
+    events.push({t, label:`Épreuve ${k+1}`, dur:dureeEpreuve, color:'#134D5A', type:'epreuve'}); t+=dureeEpreuve;
+  });
+  return {events, total:t};
+}
+
+function renderTimeline(parcours) {
+  const {events, total} = buildTimeline(parcours);
+  if (!total) return '';
+  const bars = events.map(ev => {
+    const pct = (ev.dur/total*100).toFixed(1);
+    return `<div title="${ev.label} — ${fmtSec(ev.t)} à ${fmtSec(ev.t+ev.dur)} (${fmtSec(ev.dur)})"
+      style="flex:${pct};background:${ev.color};height:24px;display:flex;align-items:center;justify-content:center;overflow:hidden;min-width:2px">
+      ${pct>5?`<span style="font-size:9px;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 3px">${ev.label}</span>`:''}
+    </div>`;
+  }).join('');
+  const totalLabel = `Durée totale : ${fmtSec(total)} (${Math.round(total/60)} min)`;
+  return `<div style="margin-top:10px">
+    <div style="font-size:11px;color:var(--ink-muted);margin-bottom:4px">📊 Timeline — ${totalLabel}</div>
+    <div style="display:flex;border-radius:4px;overflow:hidden;height:24px">${bars}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+      ${[['#B8D0D8','Attente'],['#1E6A7A','Étape'],['#5A7D87','Règles'],['#134D5A','Épreuve']].map(([c,l])=>
+        `<div style="display:flex;align-items:center;gap:3px"><div style="width:10px;height:10px;border-radius:2px;background:${c}"></div><span style="font-size:10px;color:var(--ink-muted)">${l}</span></div>`
+      ).join('')}
+    </div>
+  </div>`;
 }
 
 function renderParcours(teamName) {
   const parcours = getParcours(teamName);
   const tenc = encodeURIComponent(teamName);
   if (!parcours.length) return `<div style="font-size:13px;color:var(--ink-muted);font-style:italic">Aucun bloc — cliquez + Ajouter</div>`;
-  return parcours.map((bloc, k) => {
+  const blocs = parcours.map((bloc, k) => {
     const etape   = appData.etapes.find(e=>e.id===bloc.etapeId);
     const epreuve = appData.epreuves.find(e=>e.id===bloc.epreuveId);
+    const {events} = buildTimeline(parcours.slice(0,k+1));
+    const lastEv = events[events.length-1];
+    const startOffset = events.find(e=>e.type==='etape'&&e.label===`Étape ${k+1}`)?.t ?? 0;
     return `<div style="background:var(--cream);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
         <span style="font-size:12px;font-weight:700;color:var(--gold-dark);min-width:18px">${k+1}</span>
-        <span style="flex:1;font-size:12px;font-weight:600;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.4px">Bloc ${k+1}</span>
+        <span style="flex:1;font-size:12px;font-weight:600;color:var(--ink-muted)">Bloc ${k+1} — H+${fmtSec(startOffset)}</span>
         <button onclick="moveParcours('${tenc}',${k},-1)" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 7px;cursor:pointer;color:var(--ink-muted);font-size:11px" ${k===0?'disabled':''}>↑</button>
         <button onclick="moveParcours('${tenc}',${k},1)" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 7px;cursor:pointer;color:var(--ink-muted);font-size:11px" ${k===parcours.length-1?'disabled':''}>↓</button>
         <button onclick="removeBloc('${tenc}',${k})" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:14px;padding:2px 5px">✕</button>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-        <span style="font-size:11px;color:var(--ink-muted);min-width:60px">⏱ Attente</span>
-        <input type="number" min="0" value="${bloc.delai||0}"
-          onchange="updateBlocDelai('${tenc}',${k},this.value)"
-          style="width:70px;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
-        <span style="font-size:11px;color:var(--ink-muted)">secondes avant l'étape</span>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+        <div>
+          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">⏱ Attente (s)</div>
+          <input type="number" min="0" value="${bloc.delai||0}" onchange="updateBlocField('${tenc}',${k},'delai',+this.value)"
+            style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">🧭 Durée étape (s)</div>
+          <input type="number" min="60" value="${bloc.dureeEtape||600}" onchange="updateBlocField('${tenc}',${k},'dureeEtape',+this.value)"
+            style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">📜 Durée règles (s)</div>
+          <input type="number" min="0" value="${bloc.dureeRegles||120}" onchange="updateBlocField('${tenc}',${k},'dureeRegles',+this.value)"
+            style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">🎯 Durée épreuve (s)</div>
+          <input type="number" min="60" value="${bloc.dureeEpreuve||600}" onchange="updateBlocField('${tenc}',${k},'dureeEpreuve',+this.value)"
+            style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
+        </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
         <span style="font-size:11px;color:var(--ink-muted);min-width:60px">🧭 Étape</span>
         <select onchange="updateBlocEtape('${tenc}',${k},this.value)"
           style="flex:1;padding:6px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
-          <option value="">— Choisir une étape —</option>
+          <option value="">— Choisir —</option>
           ${appData.etapes.map(e=>`<option value="${e.id}" ${e.id===bloc.etapeId?'selected':''}>${e.nom}</option>`).join('')}
         </select>
       </div>
@@ -1421,19 +1493,26 @@ function renderParcours(teamName) {
         <span style="font-size:11px;color:var(--ink-muted);min-width:60px">🎯 Épreuve</span>
         <select onchange="updateBlocEpreuve('${tenc}',${k},this.value)"
           style="flex:1;padding:6px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
-          <option value="">— Choisir une épreuve —</option>
+          <option value="">— Choisir —</option>
           ${appData.epreuves.map(e=>`<option value="${e.id}" ${e.id===bloc.epreuveId?'selected':''}>${e.title}</option>`).join('')}
         </select>
       </div>
     </div>`;
   }).join('');
+  return blocs + renderTimeline(parcours);
 }
 
-function updateBlocDelai(tenc, k, val) {
+function updateBlocField(tenc, k, field, val) {
   const t = decodeURIComponent(tenc);
-  const p = getParcours(t); p[k].delai = parseInt(val)||0;
+  const p = getParcours(t);
+  p[k][field] = val;
   appData.jdpOrdre[t] = p;
+  // Mettre à jour la timeline
+  const ti = appData.teams.indexOf(t);
+  const el = document.getElementById('parcoursBlocs_'+ti);
+  if (el) el.innerHTML = renderParcours(t);
 }
+function updateBlocDelai(tenc, k, val) { updateBlocField(tenc, k, 'delai', parseInt(val)||0); }
 function updateBlocEtape(tenc, k, val) {
   const t = decodeURIComponent(tenc);
   const p = getParcours(t); p[k].etapeId = val ? parseInt(val) : null;
@@ -1465,7 +1544,7 @@ function removeBloc(tenc, k) {
 function addBloc(tenc) {
   const t = decodeURIComponent(tenc);
   const p = getParcours(t);
-  p.push({delai:0, etapeId:null, epreuveId:null});
+  p.push({delai:0, etapeId:null, dureeEtape:600, dureeRegles:120, dureeEpreuve:600, epreuveId:null});
   appData.jdpOrdre[t] = p;
   const ti = appData.teams.indexOf(t);
   const el = document.getElementById('parcoursBlocs_'+ti);
