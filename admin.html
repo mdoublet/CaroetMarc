@@ -567,7 +567,7 @@ const SESSION_KEY='mc_wedding_session_v2';
 let currentRole=null,currentGMStation=null,currentGMTeam=null,currentPhotoTeam=null;
 let currentEpTab=1,pendingPhotoCount=0,gmRefusedCount=0;
 let challengeState={};
-let appData={teams:[],epreuves:[],scores:{},questions:{},joueurs:[],villesBac:{},anecdotes:[],jdpEpreuves:{},jdpOrdre:{},etapes:[]};
+let appData={teams:[],epreuves:[],scores:{},questions:{},joueurs:[],villesBac:{},anecdotes:[],jdpEpreuves:{},jdpOrdre:{},etapes:[],capitaines:{}};
 let pins={admin:'1234',gm:{1:'5678',2:'5679',3:'5680',4:'5681'}};
 
 // ===================== SESSION =====================
@@ -1274,8 +1274,19 @@ function renderEpEditor(){
     </div>`;
   }
 
-  h+=`<div class="divider"></div><div style="display:flex;align-items:center;gap:10px">
-    <button class="btn btn-gold" onclick="${ep.type==='villes'?'saveVillesBacAndEpreuve()':ep.type==='qcm'?'saveAnecdotesAndEpreuve()':'saveEpreuve()'}">💾 Enregistrer</button>
+  const epDuree = appData.jdpEpreuves[ep.id]?.duree || 300;
+  h+=`<div class="divider"></div>
+  <div class="field">
+    <div class="field-label">Durée de l'épreuve ⏱</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <input type="number" id="jdpEpDuree_${ep.id}" value="${epDuree}" min="30" max="3600"
+        style="width:100px;font-size:16px;text-align:center;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif">
+      <span style="font-size:13px;color:var(--ink-muted)">secondes (${Math.floor(epDuree/60)} min)</span>
+    </div>
+  </div>
+  <div class="divider"></div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <button class="btn btn-gold" onclick="saveEpDureeAndEpreuve(${ep.id},'${ep.type}')">💾 Enregistrer</button>
     <span class="save-msg" id="epSaveMsg">Sauvegardé ✓</span>
   </div></div>`;
   document.getElementById('adminEpEditor').innerHTML=h;
@@ -1473,6 +1484,14 @@ function renderTeamFields(){
         <button onclick="deleteTeam(${i})" title="Supprimer"
           style="background:none;border:none;color:var(--danger);font-size:16px;cursor:pointer;padding:4px 6px;line-height:1">✕</button>
       </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <span style="font-size:11px;color:var(--ink-muted);min-width:70px">⚓ Capitaine</span>
+        <select id="capitaine${i}"
+          style="flex:1;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
+          <option value="">— Pas encore désigné —</option>
+          ${appData.joueurs.filter(j=>j.equipe_nom===t).map(j=>`<option value="${j.nom}" ${appData.capitaines[t]===j.nom?'selected':''}>${j.nom}</option>`).join('')}
+        </select>
+      </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div style="font-size:11px;font-weight:600;color:var(--gold-dark);text-transform:uppercase;letter-spacing:.4px">🧭 Parcours — Étapes &amp; Épreuves</div>
         <button class="btn btn-sm" onclick="addBloc('${tenc}')" style="font-size:11px;padding:4px 10px">+ Ajouter un bloc</button>
@@ -1497,6 +1516,13 @@ async function saveTeams(){
     appData.joueurs.forEach(j=>{if(j.equipe_nom===oldName)j.equipe_nom=newName;});
   }
   appData.teams=newTeams;
+  // Sauvegarder les capitaines
+  for(let i=0;i<appData.teams.length;i++){
+    const t=appData.teams[i];
+    const cap=document.getElementById('capitaine'+i)?.value||'';
+    appData.capitaines[t]=cap;
+    await db.from('jp_config').upsert({key:'jdp_capitaine_'+t,value:cap},{onConflict:'key'});
+  }
   // Sauvegarder les ordres de passage JDP (déjà à jour dans appData.jdpOrdre)
   for(const t of appData.teams){
     const ordre = appData.jdpOrdre[t] || appData.epreuves.map(e=>e.id);
@@ -3085,6 +3111,14 @@ function renderEtapeEditor() {
       <input type="text" id="etCode" value="${(e.code||'').replace(/"/g,'&quot;')}" placeholder="Ex : 7832"
         style="font-size:20px;text-align:center;letter-spacing:6px;padding:9px 12px;border-radius:var(--radius-sm);border:2px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;width:160px">
     </div>
+    <div class="field">
+      <div class="field-label">Durée de l'étape ⏱</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="number" id="etDuree" value="${e.duree||600}" min="60" max="3600"
+          style="width:100px;font-size:16px;text-align:center;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif">
+        <span style="font-size:13px;color:var(--ink-muted)">secondes (${Math.floor((e.duree||600)/60)} min)</span>
+      </div>
+    </div>
     <div class="divider"></div>
     <div class="field">
       <div class="field-label">Énigme de départ</div>
@@ -3106,6 +3140,7 @@ async function saveEtapeEditor() {
   e.nom    = document.getElementById('etNom')?.value.trim() || e.nom;
   e.lieu   = document.getElementById('etLieu')?.value.trim() || '';
   e.code   = document.getElementById('etCode')?.value.trim() || '';
+  e.duree  = parseInt(document.getElementById('etDuree')?.value)||600;
   e.enigme = document.getElementById('etEnigme')?.value.trim() || '';
   e.indices = [0,1,2,3,4,5].map(k => document.getElementById('etIndice_'+k)?.value.trim()||'');
   await saveEtapes();
@@ -3120,6 +3155,16 @@ async function deleteEtape(i) {
   currentEtapeIdx = Math.max(0, currentEtapeIdx-1);
   await saveEtapes();
   renderEtapesTabs();
+}
+
+async function saveEpDureeAndEpreuve(epId, epType) {
+  const duree = parseInt(document.getElementById('jdpEpDuree_'+epId)?.value)||300;
+  if (!appData.jdpEpreuves[epId]) appData.jdpEpreuves[epId] = {};
+  appData.jdpEpreuves[epId].duree = duree;
+  await db.from('jp_config').upsert({key:'jdp_ep_duree_'+epId, value:String(duree)},{onConflict:'key'});
+  if (epType==='villes') saveVillesBacAndEpreuve();
+  else if (epType==='qcm') saveAnecdotesAndEpreuve();
+  else saveEpreuve();
 }
 
 async function saveJdpEpreuve(epId) {
@@ -3162,10 +3207,18 @@ async function jdpInit() {
     {id:3,nom:'Pont levant',lieu:'',enigme:'',indices:['','','','','',''],code:''}
   ];
 
-  // Charger les ordres de parcours depuis jp_config
+  // Charger les ordres de parcours et durées épreuves depuis jp_config
   config.forEach(r=>{
     if(r.key.startsWith('jdp_ordre_')){
       try{ appData.jdpOrdre[r.key.replace('jdp_ordre_','')]=JSON.parse(r.value); }catch(e){}
+    }
+    if(r.key.startsWith('jdp_capitaine_')){
+      appData.capitaines[r.key.replace('jdp_capitaine_','')]=r.value;
+    }
+    if(r.key.startsWith('jdp_ep_duree_')){
+      const epId=parseInt(r.key.replace('jdp_ep_duree_',''));
+      if(!appData.jdpEpreuves[epId]) appData.jdpEpreuves[epId]={};
+      appData.jdpEpreuves[epId].duree=parseInt(r.value)||300;
     }
   });
 
