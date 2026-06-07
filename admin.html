@@ -1503,21 +1503,40 @@ function renderParcours(teamName) {
             style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
         </div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-        <span style="font-size:11px;color:var(--ink-muted);min-width:60px">🧭 Étape</span>
-        <select onchange="updateBlocEtape('${tenc}',${k},this.value)"
-          style="flex:1;padding:6px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
-          <option value="">— Choisir —</option>
-          ${appData.etapes.map(e=>`<option value="${e.id}" ${e.id===bloc.etapeId?'selected':''}>${e.nom}</option>`).join('')}
-        </select>
-      </div>
+      ${(() => {
+        // Étapes déjà utilisées à la position k par d'autres équipes
+        const usedAtPos = appData.teams
+          .filter(tn => tn !== teamName)
+          .map(tn => getParcours(tn)[k]?.etapeId)
+          .filter(Boolean);
+        const epAssocLabel = id => {
+          const etape = appData.etapes.find(e=>e.id===id);
+          const ep = etape?.epreuveId ? appData.epreuves.find(ep=>ep.id===etape.epreuveId) : null;
+          return ep ? ` · ${ep.title}` : '';
+        };
+        return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+          <span style="font-size:11px;color:var(--ink-muted);min-width:60px">🧭 Étape</span>
+          <select onchange="updateBlocEtape('${tenc}',${k},this.value)"
+            style="flex:1;padding:6px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
+            <option value="">— Choisir —</option>
+            ${appData.etapes.map(e=>{
+              const conflict = usedAtPos.includes(e.id);
+              return `<option value="${e.id}" ${e.id===bloc.etapeId?'selected':''} ${conflict&&e.id!==bloc.etapeId?'disabled style="color:#ccc"':''}>
+                ${conflict&&e.id!==bloc.etapeId?'🚫 ':''} ${e.nom}${epAssocLabel(e.id)} ${conflict&&e.id!==bloc.etapeId?'(déjà prise)':''}
+              </option>`;
+            }).join('')}
+          </select>
+        </div>`;
+      })()}
       <div style="display:flex;gap:8px;align-items:center">
         <span style="font-size:11px;color:var(--ink-muted);min-width:60px">🎯 Épreuve</span>
-        <select onchange="updateBlocEpreuve('${tenc}',${k},this.value)"
-          style="flex:1;padding:6px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
-          <option value="">— Choisir —</option>
-          ${appData.epreuves.map(e=>`<option value="${e.id}" ${e.id===bloc.epreuveId?'selected':''}>${e.title}</option>`).join('')}
-        </select>
+        ${(() => {
+          const etapeAssoc = appData.etapes.find(e=>e.id===bloc.etapeId);
+          const epAssoc = etapeAssoc?.epreuveId ? appData.epreuves.find(ep=>ep.id===etapeAssoc.epreuveId) : null;
+          return `<div style="flex:1;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:${epAssoc?'var(--gold-dark)':'var(--ink-muted)'};font-size:13px;font-weight:${epAssoc?'500':'400'}">
+            ${epAssoc ? '✓ '+epAssoc.title : etapeAssoc ? '<em>Aucune épreuve sur cette étape</em>' : '<em>Choisissez d\'abord une étape</em>'}
+          </div>`;
+        })()}
       </div>
     </div>`;
   }).join('');
@@ -3166,7 +3185,7 @@ function selectEtape(i, btn) {
 
 function addEtape() {
   const newId = Date.now();
-  appData.etapes.push({id:newId, nom:'Nouvelle étape', lieu:'', enigme:'', indices:['','','','','',''], code:''});
+  appData.etapes.push({id:newId, nom:'Nouvelle étape', lieu:'', enigme:'', indices:['','','','','',''], code:'', epreuveId:null});
   currentEtapeIdx = appData.etapes.length - 1;
   renderEtapesTabs();
 }
@@ -3213,12 +3232,11 @@ function renderEtapeEditor() {
         style="font-size:20px;text-align:center;letter-spacing:6px;padding:9px 12px;border-radius:var(--radius-sm);border:2px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;width:160px">
     </div>
     <div class="field">
-      <div class="field-label">Durée de l'étape ⏱</div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <input type="number" id="etDuree" value="${e.duree||600}" min="60" max="3600"
-          style="width:100px;font-size:16px;text-align:center;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif">
-        <span style="font-size:13px;color:var(--ink-muted)">secondes (${Math.floor((e.duree||600)/60)} min)</span>
-      </div>
+      <div class="field-label">Épreuve associée 🎯</div>
+      <select id="etEpreuve" style="width:100%;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:14px">
+        <option value="">— Aucune épreuve —</option>
+        ${appData.epreuves.map(ep=>`<option value="${ep.id}" ${ep.id===e.epreuveId?'selected':''}>${ep.title}</option>`).join('')}
+      </select>
     </div>
     <div class="divider"></div>
     <div class="field">
@@ -3238,12 +3256,13 @@ function renderEtapeEditor() {
 async function saveEtapeEditor() {
   const e = appData.etapes[currentEtapeIdx];
   if (!e) return;
-  e.nom    = document.getElementById('etNom')?.value.trim() || e.nom;
-  e.lieu   = document.getElementById('etLieu')?.value.trim() || '';
-  e.code   = document.getElementById('etCode')?.value.trim() || '';
-  e.duree  = parseInt(document.getElementById('etDuree')?.value)||600;
-  e.enigme = document.getElementById('etEnigme')?.value.trim() || '';
-  e.indices = [0,1,2,3,4,5].map(k => document.getElementById('etIndice_'+k)?.value.trim()||'');
+  e.nom       = document.getElementById('etNom')?.value.trim() || e.nom;
+  e.lieu      = document.getElementById('etLieu')?.value.trim() || '';
+  e.code      = document.getElementById('etCode')?.value.trim() || '';
+  e.enigme    = document.getElementById('etEnigme')?.value.trim() || '';
+  e.indices   = [0,1,2,3,4,5].map(k => document.getElementById('etIndice_'+k)?.value.trim()||'');
+  const epVal = document.getElementById('etEpreuve')?.value;
+  e.epreuveId = epVal ? parseInt(epVal) : null;
   await saveEtapes();
   showSaveMsg('etapeSaveMsg');
   showToast({icon:'✅', title:'Étape enregistrée', duration:2500});
