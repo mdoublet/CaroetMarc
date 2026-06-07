@@ -3299,14 +3299,34 @@ async function jdpStartGame(){
   const now=new Date().toISOString();
   jdpData.gameState={id:1,status:'active',started_at:now};
   await db.from('jp_game_state').upsert({id:1,status:'active',started_at:now},{onConflict:'id'});
-  const {data:equipes}=await db.from('jp_equipes').select('nom');
-  for(const e of (equipes||[])){
-    const t=e.nom;
-    let parcours=jdpData.lieux.map((_,i)=>i); // défaut = ordre naturel
-    try{ if(jdpData.config['parcours_'+t]) parcours=JSON.parse(jdpData.config['parcours_'+t]); }catch(ex){}
-    const ts={equipe_nom:t,step_idx:0,phase:'enigme',
-      score_etape:jdpData.scoring.score_depart,indices_demandes:0,indices_shown:0,
-      scores_etapes:[],total_score:0,started_step_at:now,parcours:JSON.stringify(parcours)};
+
+  for(const t of appData.teams){
+    // Récupérer le parcours (nouvelle structure blocs)
+    let parcours = appData.jdpOrdre[t];
+    if(!parcours || !parcours.length) {
+      // Fallback: créer un parcours par défaut depuis les étapes
+      parcours = appData.etapes.map((e,i)=>({delai:0, etapeId:e.id, epreuveId:appData.epreuves[i]?.id||null}));
+    }
+    // Normaliser en blocs objet
+    parcours = parcours.map(b => typeof b==='object' ? b : {delai:0, etapeId:b, epreuveId:null});
+
+    // Premier bloc
+    const premierBloc = parcours[0]||{};
+    const premierDelai = premierBloc.delai||0;
+    const premierePhase = premierDelai>0 ? 'delai' : 'etape';
+
+    const ts={
+      equipe_nom:t, step_idx:0,
+      phase:premierePhase,
+      score_etape:jdpData.scoring.score_depart,
+      indices_demandes:0, indices_shown:0,
+      scores_etapes:[], total_score:0,
+      started_step_at:now,
+      parcours:JSON.stringify(parcours),
+      delai_secs:premierDelai,
+      votes_capitaine:'{}', reponse_epreuve:'{}',
+      question_idx:0, lettre_bac:'A'
+    };
     jdpData.teamStates[t]=ts;
     await db.from('jp_team_states').upsert(ts,{onConflict:'equipe_nom'});
   }
