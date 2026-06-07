@@ -1390,6 +1390,7 @@ function getParcours(teamName) {
   return p.map(b => ({
     delai: b.delai||0,
     etapeId: b.etapeId||null,
+    dureeMarche: b.dureeMarche??300,
     dureeEtape: b.dureeEtape||600,
     dureeRegles: b.dureeRegles||120,
     dureeEpreuve: b.dureeEpreuve||600,
@@ -1407,12 +1408,15 @@ function buildTimeline(parcours) {
   let t = 0;
   const events = [];
   parcours.forEach((bloc, k) => {
-    const delai = bloc.delai||0;
-    const dureeEtape = bloc.dureeEtape||600;
+    const delai       = bloc.delai||0;
+    const dureeMarche = bloc.dureeMarche??300;
+    const dureeEtape  = bloc.dureeEtape||600;
     const dureeRegles = bloc.dureeRegles||120;
-    const dureeEpreuve = bloc.dureeEpreuve||600;
-    if (delai > 0) { events.push({t, label:`Attente ${k+1}`, dur:delai, color:'#B8D0D8', type:'delai'}); t+=delai; }
-    events.push({t, label:`Étape ${k+1}`, dur:dureeEtape, color:'#1E6A7A', type:'etape'}); t+=dureeEtape;
+    const dureeEpreuve= bloc.dureeEpreuve||600;
+    if (delai > 0)       { events.push({t, label:`Attente ${k+1}`, dur:delai, color:'#B8D0D8', type:'delai'}); t+=delai; }
+    if (dureeMarche > 0) { events.push({t, label:`Marche ${k+1}`, dur:dureeMarche, color:'#5A9A6A', type:'marche'}); t+=dureeMarche; }
+    const dureeIndices = Math.max(0, dureeEtape - dureeMarche);
+    if (dureeIndices > 0){ events.push({t, label:`Indices ${k+1}`, dur:dureeIndices, color:'#1E6A7A', type:'etape'}); t+=dureeIndices; }
     events.push({t, label:`Règles ${k+1}`, dur:dureeRegles, color:'#5A7D87', type:'regles'}); t+=dureeRegles;
     events.push({t, label:`Épreuve ${k+1}`, dur:dureeEpreuve, color:'#134D5A', type:'epreuve'}); t+=dureeEpreuve;
   });
@@ -1434,7 +1438,7 @@ function renderTimeline(parcours) {
     <div style="font-size:11px;color:var(--ink-muted);margin-bottom:4px">📊 Timeline — ${totalLabel}</div>
     <div style="display:flex;border-radius:4px;overflow:hidden;height:24px">${bars}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
-      ${[['#B8D0D8','Attente'],['#1E6A7A','Étape'],['#5A7D87','Règles'],['#134D5A','Épreuve']].map(([c,l])=>
+      ${[['#B8D0D8','Attente'],['#5A9A6A','Marche'],['#1E6A7A','Indices'],['#5A7D87','Règles'],['#134D5A','Épreuve']].map(([c,l])=>
         `<div style="display:flex;align-items:center;gap:3px"><div style="width:10px;height:10px;border-radius:2px;background:${c}"></div><span style="font-size:10px;color:var(--ink-muted)">${l}</span></div>`
       ).join('')}
     </div>
@@ -1468,6 +1472,11 @@ function renderParcours(teamName) {
         <div>
           <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">🧭 Durée étape (s)</div>
           <input type="number" min="60" value="${bloc.dureeEtape||600}" onchange="updateBlocField('${tenc}',${k},'dureeEtape',+this.value)"
+            style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">🚶 Durée marche (s)</div>
+          <input type="number" min="0" value="${bloc.dureeMarche??300}" onchange="updateBlocField('${tenc}',${k},'dureeMarche',+this.value)"
             style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
         </div>
         <div>
@@ -1544,7 +1553,7 @@ function removeBloc(tenc, k) {
 function addBloc(tenc) {
   const t = decodeURIComponent(tenc);
   const p = getParcours(t);
-  p.push({delai:0, etapeId:null, dureeEtape:600, dureeRegles:120, dureeEpreuve:600, epreuveId:null});
+  p.push({delai:0, etapeId:null, dureeMarche:300, dureeEtape:600, dureeRegles:120, dureeEpreuve:600, epreuveId:null});
   appData.jdpOrdre[t] = p;
   const ti = appData.teams.indexOf(t);
   const el = document.getElementById('parcoursBlocs_'+ti);
@@ -3342,7 +3351,20 @@ function renderJdpControle() {
   const elapsed=jdpData.gameState?.started_at?Math.floor((Date.now()-new Date(jdpData.gameState.started_at))/60000):0;
   if(s==='waiting'){
     statusEl.innerHTML=`<div style="display:inline-flex;align-items:center;gap:8px;background:var(--amber-bg);color:var(--amber);padding:8px 16px;border-radius:var(--radius-pill);font-size:13px;font-weight:500;margin-bottom:10px">⏸ En attente</div><p style="font-size:13px;color:var(--ink-muted)">Le jeu de piste n'a pas encore démarré.</p>`;
-    actEl.innerHTML=`<button class="btn btn-gold" onclick="jdpStartGame()">▶ Démarrer le jeu</button>`;
+    actEl.innerHTML=`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+  <button class="btn btn-gold" onclick="jdpStartGame()">▶ Démarrer le jeu</button>
+  <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-muted)">
+    ⚡ Vitesse :
+    <select id="timeMultiplier" style="padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
+      <option value="1">×1 — Normal</option>
+      <option value="2">×2</option>
+      <option value="5">×5</option>
+      <option value="10">×10 — Test rapide</option>
+      <option value="20">×20 — Turbo</option>
+      <option value="60">×60 — 1h en 1min</option>
+    </select>
+  </label>
+</div>`;
   } else if(s==='active'){
     statusEl.innerHTML=`<div style="display:inline-flex;align-items:center;gap:8px;background:var(--success-bg);color:var(--success);padding:8px 16px;border-radius:var(--radius-pill);font-size:13px;font-weight:500;margin-bottom:10px">🟢 En cours — T+${elapsed} min</div><p style="font-size:13px;color:var(--ink-muted)">Démarré à ${jdpData.gameState.started_at?new Date(jdpData.gameState.started_at).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):'-'}</p>`;
     actEl.innerHTML=`<button class="btn btn-danger btn-sm" onclick="jdpStopGame()">⏹ Arrêter</button><button class="btn btn-sm" onclick="jdpResetGame()">🔄 Réinitialiser</button>`;
@@ -3374,10 +3396,12 @@ function jdpPhaseLabel(p){
 }
 
 async function jdpStartGame(){
-  if(!confirm('Démarrer le jeu de piste ? Toutes les équipes recevront leur première énigme.')) return;
+  const mult = parseFloat(document.getElementById('timeMultiplier')?.value||'1');
+  const multLabel = mult > 1 ? ` (×${mult} — mode test)` : '';
+  if(!confirm(`Démarrer le jeu de piste${multLabel} ? Toutes les équipes recevront leur première énigme.`)) return;
   const now=new Date().toISOString();
-  jdpData.gameState={id:1,status:'active',started_at:now};
-  await db.from('jp_game_state').upsert({id:1,status:'active',started_at:now},{onConflict:'id'});
+  jdpData.gameState={id:1,status:'active',started_at:now,time_multiplier:mult};
+  await db.from('jp_game_state').upsert({id:1,status:'active',started_at:now,time_multiplier:mult},{onConflict:'id'});
 
   for(const t of appData.teams){
     // Récupérer le parcours (nouvelle structure blocs)
