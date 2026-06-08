@@ -1399,9 +1399,9 @@ function getParcours(teamName) {
     const dureeEnigme  = b.dureeEnigme??Math.max(0, dureeEtape - dureeMarche);
     const delaiCalcule = Math.max(0, dureeEtape - dureeMarche - dureeEnigme);
     // dureeEpreuve : lue depuis l'épreuve associée à l'étape
-    // Utiliser == pour comparer car l'ID peut être string ou number
-    const etapeId = b.etapeId ? Number(b.etapeId) : null;
-    const etape = appData.etapes.find(e=>e.id===etapeId);
+    // Comparer en string pour gérer les grands IDs timestamp
+    const etapeId = b.etapeId ? String(b.etapeId) : null;
+    const etape = appData.etapes.find(e=>String(e.id)===etapeId);
     const epreuve = etape?.epreuveId ? appData.epreuves.find(ep=>ep.id===etape.epreuveId) : null;
     const dureeEpreuve = epreuve ? ((epreuve.duree||epreuve.max_score*60)||600) : (b.dureeEpreuve||600);
     const dureeRegles  = epreuve ? (epreuve.dureeRegles||b.dureeRegles||120) : (b.dureeRegles||120);
@@ -1469,7 +1469,7 @@ function renderParcours(teamName) {
   const tenc = encodeURIComponent(teamName);
   if (!parcours.length) return `<div style="font-size:13px;color:var(--ink-muted);font-style:italic">Aucun bloc — cliquez + Ajouter</div>`;
   const blocs = parcours.map((bloc, k) => {
-    const etape   = appData.etapes.find(e=>e.id===bloc.etapeId);
+    const etape   = appData.etapes.find(e=>String(e.id)===String(bloc.etapeId));
     const epreuve = appData.epreuves.find(e=>e.id===bloc.epreuveId);
     const {events} = buildTimeline(parcours.slice(0,k+1));
     const lastEv = events[events.length-1];
@@ -1521,15 +1521,17 @@ function renderParcours(teamName) {
         const usedAtPos = appData.teams
           .filter(tn => tn !== teamName)
           .map(tn => getParcours(tn)[k]?.etapeId)
-          .filter(Boolean);
+          .filter(Boolean)
+          .map(String);
         // Anti-doublon intra-équipe (même parcours, autre bloc)
         const usedInParcours = getParcours(teamName)
           .filter((_,idx) => idx !== k)
           .map(b => b.etapeId)
-          .filter(Boolean);
-        const etapeAssocId = bloc.etapeId ? Number(bloc.etapeId) : null;
-        const etapeAssoc = appData.etapes.find(e=>e.id===etapeAssocId);
-        const epAssoc = etapeAssoc?.epreuveId ? appData.epreuves.find(ep=>ep.id===Number(etapeAssoc.epreuveId)) : null;
+          .filter(Boolean)
+          .map(String);
+        const etapeAssocId = bloc.etapeId ? String(bloc.etapeId) : null;
+        const etapeAssoc = appData.etapes.find(e=>String(e.id)===etapeAssocId);
+        const epAssoc = etapeAssoc?.epreuveId ? appData.epreuves.find(ep=>String(ep.id)===String(etapeAssoc.epreuveId)) : null;
         return `<div style="margin-bottom:6px">
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
             <span style="font-size:11px;color:var(--ink-muted);min-width:60px">🧭 Étape</span>
@@ -1537,11 +1539,13 @@ function renderParcours(teamName) {
               style="flex:1;padding:6px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
               <option value="">— Choisir —</option>
               ${appData.etapes.map(e=>{
-                const conflictInter = usedAtPos.includes(e.id) && e.id !== bloc.etapeId;
-                const conflictIntra = usedInParcours.includes(e.id) && e.id !== bloc.etapeId;
+                const eIdStr = String(e.id);
+                const blocIdStr = bloc.etapeId ? String(bloc.etapeId) : null;
+                const conflictInter = usedAtPos.map(String).includes(eIdStr) && eIdStr !== blocIdStr;
+                const conflictIntra = usedInParcours.map(String).includes(eIdStr) && eIdStr !== blocIdStr;
                 const disabled = conflictInter || conflictIntra;
                 const reason = conflictInter ? ' (autre équipe)' : conflictIntra ? ' (déjà dans ce parcours)' : '';
-                return `<option value="${e.id}" ${e.id===bloc.etapeId?'selected':''} ${disabled?'disabled':''}>
+                return `<option value="${e.id}" ${eIdStr===blocIdStr?'selected':''} ${disabled?'disabled':''}>
                   ${disabled?'🚫 ':''} ${e.nom}${reason}
                 </option>`;
               }).join('')}
@@ -1571,8 +1575,8 @@ function updateBlocDelai(tenc, k, val) { updateBlocField(tenc, k, 'delai', parse
 function updateBlocEtape(tenc, k, val) {
   const t = decodeURIComponent(tenc);
   const p = getParcours(t);
-  // parseInt peut tronquer les grands IDs (timestamp) — utiliser Number()
-  p[k].etapeId = val ? Number(val) : null;
+  // Stocker en string pour éviter les problèmes de précision des grands entiers
+  p[k].etapeId = val || null;
   appData.jdpOrdre[t] = p;
   // Rafraîchir le DOM pour afficher l'épreuve associée et recalculer dureeEpreuve
   const i = appData.teams.indexOf(t);
