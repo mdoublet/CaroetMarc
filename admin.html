@@ -1251,6 +1251,12 @@ function renderEpEditor(){
         <input type="number" class="admin-input" id="epDuree" value="${ep.duree||600}" min="60" style="width:100px;text-align:center">
         <span style="font-size:12px;color:var(--ink-muted)">secondes</span>
       </div>
+    </div>
+    <div class="field"><div class="field-label">Durée lecture des règles (s) 📜</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="number" class="admin-input" id="epDureeRegles" value="${ep.dureeRegles||120}" min="0" style="width:100px;text-align:center">
+        <span style="font-size:12px;color:var(--ink-muted)">secondes</span>
+      </div>
     </div>`;
   if(ep.type==='photos'){
     h+=`<div class="divider"></div>`;
@@ -1393,20 +1399,19 @@ function getParcours(teamName) {
     // Durées depuis les entités liées
     const dureeEtape   = etape?.dureeEtape || b.dureeEtape || 300;   // sur place (config étape)
     const dureeEpreuve = epreuve?.duree || b.dureeEpreuve || 600;     // épreuve (config épreuve)
-    const dureeRegles  = b.dureeRegles || 120;
+    const dureeRegles  = epreuve?.dureeRegles || b.dureeRegles || 120;
     const dureeMarche  = b.dureeMarche ?? 300;
-    // dureeBloc = durée totale du bloc (config bloc)
-    const dureeBloc    = b.dureeBloc || (dureeMarche + dureeEtape + dureeEpreuve);
-    // attente = ce qui reste après marche + étape + épreuve
-    const delaiCalcule = Math.max(0, dureeBloc - dureeMarche - dureeEtape - dureeEpreuve);
+    const dureeBloc    = b.dureeBloc || (dureeMarche + dureeEtape + dureeRegles + dureeEpreuve);
+    // attente = dureeBloc - marche - étape - règles - épreuve
+    const delaiCalcule = Math.max(0, dureeBloc - dureeMarche - dureeEtape - dureeRegles - dureeEpreuve);
     return {
       etapeId:      b.etapeId||null,
       dureeBloc,
       dureeMarche,
       dureeEtape,
-      dureeEpreuve,
       dureeRegles,
-      delaiCalcule, // lecture seule
+      dureeEpreuve,
+      delaiCalcule,
     };
   });
 }
@@ -1429,6 +1434,7 @@ function buildTimeline(parcours) {
     if (delai > 0)        { events.push({t, label:`Attente ${k+1}`, dur:delai, color:'#B8D0D8', type:'delai'}); t+=delai; }
     if (dureeMarche > 0)  { events.push({t, label:`Marche ${k+1}`, dur:dureeMarche, color:'#5A9A6A', type:'marche'}); t+=dureeMarche; }
     if (dureeEtape > 0)   { events.push({t, label:`Étape ${k+1}`, dur:dureeEtape, color:'#1E6A7A', type:'etape'}); t+=dureeEtape; }
+    if (dureeRegles > 0)  { events.push({t, label:`Règles ${k+1}`, dur:dureeRegles, color:'#5A7D87', type:'regles'}); t+=dureeRegles; }
     events.push({t, label:`Règles ${k+1}`, dur:dureeRegles, color:'#5A7D87', type:'regles'}); t+=dureeRegles;
     events.push({t, label:`Épreuve ${k+1}`, dur:dureeEpreuve, color:'#134D5A', type:'epreuve'}); t+=dureeEpreuve;
   });
@@ -1505,9 +1511,10 @@ function renderParcours(teamName) {
           </div>
         </div>
         <div>
-          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">📜 Durée règles (s)</div>
-          <input type="number" min="0" value="${bloc.dureeRegles||120}" onchange="updateBlocField('${tenc}',${k},'dureeRegles',+this.value)"
-            style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
+          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">📜 Durée règles (auto)</div>
+          <div style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink-muted);font-size:12px;text-align:center">
+            ${bloc.dureeRegles||'—'} s
+          </div>
         </div>
       </div>
       ${(() => {
@@ -3338,13 +3345,12 @@ async function deleteEtape(i) {
 async function saveEpDureeAndEpreuve(epId, epType) {
   // Lire depuis le champ epDuree (colonne epreuves.duree)
   const duree = parseInt(document.getElementById('epDuree')?.value)||600;
+  const dureeRegles = parseInt(document.getElementById('epDureeRegles')?.value)||120;
   const ep = appData.epreuves.find(e=>e.id==epId);
-  if (ep) ep.duree = duree;
-  // Garder aussi dans jdpEpreuves pour compatibilité
+  if (ep) { ep.duree = duree; ep.dureeRegles = dureeRegles; }
   if (!appData.jdpEpreuves[epId]) appData.jdpEpreuves[epId] = {};
   appData.jdpEpreuves[epId].duree = duree;
-  // Sauvegarder dans la table epreuves
-  await db.from('epreuves').update({duree}).eq('id', epId);
+  await db.from('epreuves').update({duree, dureeRegles}).eq('id', epId);
   if (epType==='villes') saveVillesBacAndEpreuve();
   else if (epType==='qcm') saveAnecdotesAndEpreuve();
   else saveEpreuve();
