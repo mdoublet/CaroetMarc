@@ -1399,7 +1399,9 @@ function getParcours(teamName) {
     const dureeEnigme  = b.dureeEnigme??Math.max(0, dureeEtape - dureeMarche);
     const delaiCalcule = Math.max(0, dureeEtape - dureeMarche - dureeEnigme);
     // dureeEpreuve : lue depuis l'épreuve associée à l'étape
-    const etape = appData.etapes.find(e=>e.id===(b.etapeId||null));
+    // Utiliser == pour comparer car l'ID peut être string ou number
+    const etapeId = b.etapeId ? Number(b.etapeId) : null;
+    const etape = appData.etapes.find(e=>e.id===etapeId);
     const epreuve = etape?.epreuveId ? appData.epreuves.find(ep=>ep.id===etape.epreuveId) : null;
     const dureeEpreuve = epreuve ? ((epreuve.duree||epreuve.max_score*60)||600) : (b.dureeEpreuve||600);
     const dureeRegles  = epreuve ? (epreuve.dureeRegles||b.dureeRegles||120) : (b.dureeRegles||120);
@@ -1525,8 +1527,9 @@ function renderParcours(teamName) {
           .filter((_,idx) => idx !== k)
           .map(b => b.etapeId)
           .filter(Boolean);
-        const etapeAssoc = appData.etapes.find(e=>e.id===bloc.etapeId);
-        const epAssoc = etapeAssoc?.epreuveId ? appData.epreuves.find(ep=>ep.id===etapeAssoc.epreuveId) : null;
+        const etapeAssocId = bloc.etapeId ? Number(bloc.etapeId) : null;
+        const etapeAssoc = appData.etapes.find(e=>e.id===etapeAssocId);
+        const epAssoc = etapeAssoc?.epreuveId ? appData.epreuves.find(ep=>ep.id===Number(etapeAssoc.epreuveId)) : null;
         return `<div style="margin-bottom:6px">
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
             <span style="font-size:11px;color:var(--ink-muted);min-width:60px">🧭 Étape</span>
@@ -1567,8 +1570,14 @@ function updateBlocField(tenc, k, field, val) {
 function updateBlocDelai(tenc, k, val) { updateBlocField(tenc, k, 'delai', parseInt(val)||0); }
 function updateBlocEtape(tenc, k, val) {
   const t = decodeURIComponent(tenc);
-  const p = getParcours(t); p[k].etapeId = val ? parseInt(val) : null;
+  const p = getParcours(t);
+  // parseInt peut tronquer les grands IDs (timestamp) — utiliser Number()
+  p[k].etapeId = val ? Number(val) : null;
   appData.jdpOrdre[t] = p;
+  // Rafraîchir le DOM pour afficher l'épreuve associée et recalculer dureeEpreuve
+  const i = appData.teams.indexOf(t);
+  const el = document.getElementById('parcoursBlocs_'+i);
+  if (el) el.innerHTML = renderParcours(t);
 }
 function updateBlocEpreuve(tenc, k, val) {
   const t = decodeURIComponent(tenc);
