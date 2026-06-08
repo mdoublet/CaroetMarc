@@ -1387,25 +1387,26 @@ function getParcours(teamName) {
   }
   // Normaliser : ajouter champs manquants
   return p.map(b => {
-    const dureeEtape   = b.dureeEtape||600;
-    const dureeMarche  = b.dureeMarche??300;
-    const dureeEnigme  = b.dureeEnigme??Math.max(0, dureeEtape - dureeMarche);
-    const delaiCalcule = Math.max(0, dureeEtape - dureeMarche - dureeEnigme);
-    // dureeEpreuve : lue depuis l'épreuve associée à l'étape
-    // Comparer en string pour gérer les grands IDs timestamp
-    const etapeId = b.etapeId ? String(b.etapeId) : null;
-    const etape = appData.etapes.find(e=>String(e.id)===etapeId);
-    const epreuve = etape?.epreuveId ? appData.epreuves.find(ep=>ep.id===etape.epreuveId) : null;
-    const dureeEpreuve = epreuve ? ((epreuve.duree||epreuve.max_score*60)||600) : (b.dureeEpreuve||600);
-    const dureeRegles  = epreuve ? (epreuve.dureeRegles||b.dureeRegles||120) : (b.dureeRegles||120);
+    const etapeId  = b.etapeId ? String(b.etapeId) : null;
+    const etape    = appData.etapes.find(e=>String(e.id)===etapeId);
+    const epreuve  = etape?.epreuveId ? appData.epreuves.find(ep=>String(ep.id)===String(etape.epreuveId)) : null;
+    // Durées depuis les entités liées
+    const dureeEtape   = etape?.dureeEtape || b.dureeEtape || 300;   // sur place (config étape)
+    const dureeEpreuve = epreuve?.duree || b.dureeEpreuve || 600;     // épreuve (config épreuve)
+    const dureeRegles  = b.dureeRegles || 120;
+    const dureeMarche  = b.dureeMarche ?? 300;
+    // dureeBloc = durée totale du bloc (config bloc)
+    const dureeBloc    = b.dureeBloc || (dureeMarche + dureeEtape + dureeEpreuve);
+    // attente = ce qui reste après marche + étape + épreuve
+    const delaiCalcule = Math.max(0, dureeBloc - dureeMarche - dureeEtape - dureeEpreuve);
     return {
-      etapeId:     b.etapeId||null,
-      dureeEtape,
+      etapeId:      b.etapeId||null,
+      dureeBloc,
       dureeMarche,
-      dureeEnigme,
-      delaiCalcule,
+      dureeEtape,
+      dureeEpreuve,
       dureeRegles,
-      dureeEpreuve, // calculé depuis l'épreuve
+      delaiCalcule, // lecture seule
     };
   });
 }
@@ -1420,15 +1421,14 @@ function buildTimeline(parcours) {
   let t = 0;
   const events = [];
   parcours.forEach((bloc, k) => {
-    const dureeEtape   = bloc.dureeEtape||600;
     const dureeMarche  = bloc.dureeMarche??300;
-    const dureeEnigme  = bloc.dureeEnigme??Math.max(0,dureeEtape-dureeMarche);
-    const delai        = Math.max(0, dureeEtape - dureeMarche - dureeEnigme);
-    const dureeRegles  = bloc.dureeRegles||120;
+    const dureeEtape   = bloc.dureeEtape||300;
     const dureeEpreuve = bloc.dureeEpreuve||600;
+    const dureeRegles  = bloc.dureeRegles||120;
+    const delai        = bloc.delaiCalcule||0;
     if (delai > 0)        { events.push({t, label:`Attente ${k+1}`, dur:delai, color:'#B8D0D8', type:'delai'}); t+=delai; }
     if (dureeMarche > 0)  { events.push({t, label:`Marche ${k+1}`, dur:dureeMarche, color:'#5A9A6A', type:'marche'}); t+=dureeMarche; }
-    if (dureeEnigme > 0)  { events.push({t, label:`Énigme ${k+1}`, dur:dureeEnigme, color:'#1E6A7A', type:'etape'}); t+=dureeEnigme; }
+    if (dureeEtape > 0)   { events.push({t, label:`Étape ${k+1}`, dur:dureeEtape, color:'#1E6A7A', type:'etape'}); t+=dureeEtape; }
     events.push({t, label:`Règles ${k+1}`, dur:dureeRegles, color:'#5A7D87', type:'regles'}); t+=dureeRegles;
     events.push({t, label:`Épreuve ${k+1}`, dur:dureeEpreuve, color:'#134D5A', type:'epreuve'}); t+=dureeEpreuve;
   });
@@ -1477,8 +1477,8 @@ function renderParcours(teamName) {
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
         <div>
-          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">⏱ Durée totale étape (s)</div>
-          <input type="number" min="60" value="${bloc.dureeEtape||600}" onchange="updateBlocField('${tenc}',${k},'dureeEtape',+this.value)"
+          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">⏱ Durée totale bloc (s)</div>
+          <input type="number" min="60" value="${bloc.dureeBloc||1200}" onchange="updateBlocField('${tenc}',${k},'dureeBloc',+this.value)"
             style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
         </div>
         <div>
@@ -1487,26 +1487,27 @@ function renderParcours(teamName) {
             style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
         </div>
         <div>
-          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">🔍 Durée énigme (s)</div>
-          <input type="number" min="0" value="${bloc.dureeEnigme??300}" onchange="updateBlocField('${tenc}',${k},'dureeEnigme',+this.value)"
-            style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
+          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">🔍 Durée étape (auto)</div>
+          <div style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink-muted);font-size:12px;text-align:center">
+            ${bloc.dureeEtape||'—'} s
+          </div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">🎯 Durée épreuve (auto)</div>
+          <div style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink-muted);font-size:12px;text-align:center">
+            ${bloc.dureeEpreuve||'—'} s
+          </div>
         </div>
         <div>
           <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">⏸ Attente calculée</div>
-          <div style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink-muted);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
-            ${bloc.delaiCalcule||0} s
+          <div style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:${(bloc.delaiCalcule||0)<0?'var(--danger)':'var(--ink-muted)'};font-size:12px;text-align:center">
+            ${bloc.delaiCalcule||0} s${(bloc.delaiCalcule||0)<0?' ⚠️ Durée totale trop courte':''}
           </div>
         </div>
         <div>
           <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">📜 Durée règles (s)</div>
           <input type="number" min="0" value="${bloc.dureeRegles||120}" onchange="updateBlocField('${tenc}',${k},'dureeRegles',+this.value)"
             style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
-        </div>
-        <div>
-          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">🎯 Durée épreuve</div>
-          <div style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink-muted);font-size:12px;text-align:center">
-            ${bloc.dureeEpreuve ? bloc.dureeEpreuve+'s (auto)' : '—'}
-          </div>
         </div>
       </div>
       ${(() => {
@@ -1602,7 +1603,7 @@ function removeBloc(tenc, k) {
 function addBloc(tenc) {
   const t = decodeURIComponent(tenc);
   const p = getParcours(t);
-  p.push({etapeId:null, dureeEtape:600, dureeMarche:300, dureeEnigme:300, dureeRegles:120});
+  p.push({etapeId:null, dureeBloc:1200, dureeMarche:300, dureeRegles:120});
   appData.jdpOrdre[t] = p;
   const ti = appData.teams.indexOf(t);
   const el = document.getElementById('parcoursBlocs_'+ti);
@@ -3280,6 +3281,14 @@ function renderEtapeEditor() {
         style="font-size:20px;text-align:center;letter-spacing:6px;padding:9px 12px;border-radius:var(--radius-sm);border:2px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;width:160px">
     </div>
     <div class="field">
+      <div class="field-label">Durée de l'étape (sur place) ⏱</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="number" id="etDureeEtape" value="${e.dureeEtape||300}" min="30" max="3600"
+          style="width:100px;font-size:16px;text-align:center;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif">
+        <span style="font-size:13px;color:var(--ink-muted)">secondes (${Math.floor((e.dureeEtape||300)/60)} min)</span>
+      </div>
+    </div>
+    <div class="field">
       <div class="field-label">Épreuve associée 🎯</div>
       <select id="etEpreuve" style="width:100%;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:14px">
         <option value="">— Aucune épreuve —</option>
@@ -3304,13 +3313,14 @@ function renderEtapeEditor() {
 async function saveEtapeEditor() {
   const e = appData.etapes[currentEtapeIdx];
   if (!e) return;
-  e.nom       = document.getElementById('etNom')?.value.trim() || e.nom;
-  e.lieu      = document.getElementById('etLieu')?.value.trim() || '';
-  e.code      = document.getElementById('etCode')?.value.trim() || '';
-  e.enigme    = document.getElementById('etEnigme')?.value.trim() || '';
-  e.indices   = [0,1,2,3,4,5].map(k => document.getElementById('etIndice_'+k)?.value.trim()||'');
-  const epVal = document.getElementById('etEpreuve')?.value;
-  e.epreuveId = epVal ? parseInt(epVal) : null;
+  e.nom        = document.getElementById('etNom')?.value.trim() || e.nom;
+  e.lieu       = document.getElementById('etLieu')?.value.trim() || '';
+  e.code       = document.getElementById('etCode')?.value.trim() || '';
+  e.dureeEtape = parseInt(document.getElementById('etDureeEtape')?.value)||300;
+  e.enigme     = document.getElementById('etEnigme')?.value.trim() || '';
+  e.indices    = [0,1,2,3,4,5].map(k => document.getElementById('etIndice_'+k)?.value.trim()||'');
+  const epVal  = document.getElementById('etEpreuve')?.value;
+  e.epreuveId  = epVal ? parseInt(epVal) : null;
   await saveEtapes();
   showSaveMsg('etapeSaveMsg');
   showToast({icon:'✅', title:'Étape enregistrée', duration:2500});
