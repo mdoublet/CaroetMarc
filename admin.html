@@ -1268,7 +1268,57 @@ function renderEpEditor(){
       </div>
     </div>`;
   if(ep.type==='photos'){
-    h+=`<div class="divider"></div>`;
+    const qs = appData.questions[currentEpTab]||[];
+    const ptsPerte = ep.pointsPerte||2;
+    h+=`<div class="divider"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:14px;font-weight:500">Photos à prendre <span style="font-size:12px;color:var(--ink-muted);font-weight:400">${qs.length} configurée${qs.length>1?'s':''}</span></div>
+      <button class="btn btn-sm" onclick="addPhotoLocal()">+ Ajouter une photo</button>
+    </div>
+    <div class="notice" style="margin-bottom:12px">
+      Le temps de l'épreuve sera divisé en <strong>${qs.length||1}</strong> tranche${qs.length>1?'s':''} égale${qs.length>1?'s':''} de <strong>${Math.round((ep.duree||600)/Math.max(1,qs.length))}s</strong> chacune.
+      Le sujet de chaque photo n'est révélé qu'au démarrage de l'épreuve (pas pendant les règles).
+    </div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;color:var(--ink-muted);margin-bottom:4px">Points perdus par tentative ratée</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="number" min="0" max="10" value="${ptsPerte}" id="epPointsPerte"
+          style="width:80px;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-size:14px;text-align:center">
+        <span style="font-size:12px;color:var(--ink-muted)">pts par photo refusée</span>
+      </div>
+    </div>
+    <div id="photosEditor">
+      ${qs.map((q,i)=>{
+        const c = q.contenu||{};
+        return `<div style="background:var(--cream);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+            <span style="font-size:11px;font-weight:700;color:var(--gold-dark)">Photo ${i+1}</span>
+            <span style="flex:1;font-size:11px;color:var(--ink-muted)">max ${c.pointsMax||10} pts · −${c.pointsPerte||ptsPerte} pts/tentative ratée · tranche ${Math.round((ep.duree||600)/Math.max(1,qs.length))}s</span>
+            <button onclick="removePhotoLocal(${i})" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:13px">✕</button>
+          </div>
+          <div style="margin-bottom:8px">
+            <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">📸 Sujet de la photo (révélé au démarrage)</div>
+            <input type="text" value="${(c.sujet||'').replace(/"/g,'&quot;')}" placeholder="Ex : Une photo avec les deux mariés et le phare"
+              onchange="updatePhotoLocal(${i},'sujet',this.value)"
+              style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <div>
+              <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">🏆 Points max</div>
+              <input type="number" min="1" max="50" value="${c.pointsMax||10}"
+                onchange="updatePhotoLocal(${i},'pointsMax',+this.value)"
+                style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-size:13px;text-align:center">
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">📉 Perte par tentative ratée</div>
+              <input type="number" min="0" max="10" value="${c.pointsPerte||ptsPerte}"
+                onchange="updatePhotoLocal(${i},'pointsPerte',+this.value)"
+                style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-size:13px;text-align:center">
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
   }
   if(ep.type==='qcm'){
     h+=`<div class="divider"></div>
@@ -1307,6 +1357,53 @@ function renderEpEditor(){
 function getLocalQs(){return appData.questions[currentEpTab]||[];}
 function updateQLocal(i,f,v){getLocalQs()[i].contenu[f]=f==='correct'?parseInt(v):v;}
 function updateQOptLocal(i,j,v){getLocalQs()[i].contenu.opts[j]=v;}
+function addPhotoLocal() {
+  const ep = appData.epreuves.find(e=>e.id===currentEpTab);
+  const ptsPerte = ep?.pointsPerte||2;
+  if (!appData.questions[currentEpTab]) appData.questions[currentEpTab]=[];
+  const n = appData.questions[currentEpTab].length;
+  appData.questions[currentEpTab].push({
+    epreuve_id: currentEpTab, ordre: n,
+    contenu: {sujet:'', pointsMax:10, pointsPerte: ptsPerte}
+  });
+  renderEpEditor();
+}
+function removePhotoLocal(i) {
+  appData.questions[currentEpTab].splice(i,1);
+  appData.questions[currentEpTab].forEach((q,idx)=>q.ordre=idx);
+  renderEpEditor();
+}
+function updatePhotoLocal(i, field, val) {
+  if (!appData.questions[currentEpTab]?.[i]) return;
+  appData.questions[currentEpTab][i].contenu[field] = val;
+  renderEpEditor();
+}
+async function savePhotosAndEpreuve() {
+  const ep = appData.epreuves.find(e=>e.id===currentEpTab);
+  if (!ep) return;
+  // Sauvegarder pointsPerte global sur l'épreuve
+  const ptsPerte = parseInt(document.getElementById('epPointsPerte')?.value)||2;
+  ep.pointsPerte = ptsPerte;
+  await db.from('epreuves').update({
+    title: ep.title,
+    instructions: ep.instructions,
+    scoring: ep.scoring,
+    max_score: ep.max_score,
+    duree: ep.duree,
+    dureeRegles: ep.dureeRegles,
+    pointsPerte: ptsPerte
+  }).eq('id', ep.id);
+  // Sauvegarder les questions (photos)
+  const qs = appData.questions[currentEpTab]||[];
+  await db.from('questions').delete().eq('epreuve_id', currentEpTab);
+  if (qs.length) {
+    await db.from('questions').insert(
+      qs.map((q,i)=>({epreuve_id:currentEpTab, ordre:i, contenu:q.contenu}))
+    );
+  }
+  showSaveMsg('epSaveMsg');
+  showToast({icon:'✅', title:'Épreuve photos enregistrée', duration:2500});
+}
 function addQLocal(){if(!appData.questions[currentEpTab])appData.questions[currentEpTab]=[];appData.questions[currentEpTab].push({epreuve_id:currentEpTab,ordre:appData.questions[currentEpTab].length,contenu:{q:'',opts:['Marc','Caroline','Les deux'],correct:0}});renderEpEditor();}
 function removeQLocal(i){appData.questions[currentEpTab].splice(i,1);renderEpEditor();}
 // ===================== ADMIN: VILLES BAC =====================
@@ -1494,7 +1591,7 @@ function renderGantt() {
       const epreuve  = bloc.dureeEpreuve||600;
       if(delai>0)    { allSegments.push({team:t,teamIdx:ti,lieu:'⏸',nom:'Attente',type:'delai',tStart:cursor,tEnd:cursor+delai,color:'#C8D8DC'}); cursor+=delai; }
       if(marche>0)   { allSegments.push({team:t,teamIdx:ti,lieu,nom,type:'marche',tStart:cursor,tEnd:cursor+marche,color:'#8DBF9A'}); cursor+=marche; }
-      if(etapeDur>0) { allSegments.push({team:t,teamIdx:ti,lieu,nom,type:'etape',tStart:cursor,tEnd:cursor+etapeDur,color:TEAM_COLORS[ti%4]}); cursor+=etapeDur; }
+      if(etapeDur>0) { allSegments.push({team:t,teamIdx:ti,lieu,nom,type:'etape',tStart:cursor,tEnd:cursor+etapeDur,color:'#1E6A7A'}); cursor+=etapeDur; }
       if(regles>0)   { allSegments.push({team:t,teamIdx:ti,lieu,nom,type:'regles',tStart:cursor,tEnd:cursor+regles,color:'#7A9AAA'}); cursor+=regles; }
       if(epreuve>0)  { allSegments.push({team:t,teamIdx:ti,lieu,nom,type:'epreuve',tStart:cursor,tEnd:cursor+epreuve,color:'#2A4A5A'}); cursor+=epreuve; }
     });
@@ -1512,6 +1609,18 @@ function renderGantt() {
   }
   etapeSegs.forEach((s,i)=>{ if(collisionIdx.has(i)) s.collision=true; });
 
+  // Détection proximité : même lieu, écart < 120s sans chevauchement
+  const PROX_SEUIL = 120; // secondes
+  const proxIdx = new Set();
+  for(let i=0;i<etapeSegs.length;i++) for(let j=i+1;j<etapeSegs.length;j++) {
+    const a=etapeSegs[i], b=etapeSegs[j];
+    if(a.team===b.team || a.lieu!==b.lieu || a.lieu==='⏸') continue;
+    if(collisionIdx.has(i) || collisionIdx.has(j)) continue; // déjà en collision
+    const gap = Math.min(Math.abs(a.tStart - b.tEnd), Math.abs(b.tStart - a.tEnd));
+    if(gap < PROX_SEUIL) { proxIdx.add(i); proxIdx.add(j); }
+  }
+  etapeSegs.forEach((s,i)=>{ if(proxIdx.has(i)) s.proximity=true; });
+
   const W=620, ROW_H=32, LBL=72, scale=W/totalMax;
   const TICK=300;
   let ticks='';
@@ -1527,18 +1636,21 @@ function renderGantt() {
     rows+=`<rect x="${LBL}" y="${y+3}" width="${W}" height="${ROW_H-6}" fill="var(--cream)" rx="2"/>`;
     allSegments.filter(s=>s.team===t).forEach(s=>{
       const x=LBL+s.tStart*scale, w=Math.max(2,(s.tEnd-s.tStart)*scale);
-      const fill=s.collision?'#FF4040':s.color;
+      const fill=s.collision?'#FF4040':s.proximity?'#FF8C00':s.color;
       rows+=`<rect x="${x}" y="${y+3}" width="${w}" height="${ROW_H-6}" fill="${fill}" rx="2" opacity="${s.type==='delai'?0.35:0.88}"><title>${s.nom} · ${s.type} · +${Math.floor(s.tStart/60)}m–+${Math.floor(s.tEnd/60)}m${s.collision?' ⚠️ COLLISION':''}</title></rect>`;
       if(w>28&&s.type!=='delai') rows+=`<text x="${x+w/2}" y="${y+ROW_H/2+4}" font-size="9" fill="white" text-anchor="middle" style="pointer-events:none">${(s.nom||'').slice(0,9)}</text>`;
     });
   });
   const hasC = collisionIdx.size>0;
+  const hasP = proxIdx.size>0;
   el.innerHTML=`${hasC
-    ?'<div style="background:#FFF0F0;border:1px solid var(--danger);border-radius:6px;padding:7px 12px;font-size:12px;color:var(--danger);margin-bottom:8px">⚠️ Collision — deux équipes au même endroit</div>'
-    :'<div style="background:var(--success-bg);border:1px solid var(--success);border-radius:6px;padding:7px 12px;font-size:12px;color:var(--success);margin-bottom:8px">✓ Aucune collision</div>'}
+    ?'<div style="background:#FFF0F0;border:1px solid var(--danger);border-radius:6px;padding:7px 12px;font-size:12px;color:var(--danger);margin-bottom:8px">🔴 Collision — deux équipes au même endroit au même moment</div>'
+    :hasP
+      ?'<div style="background:#FFF4E0;border:1px solid #FF8C00;border-radius:6px;padding:7px 12px;font-size:12px;color:#CC6600;margin-bottom:8px">🟠 Proximité — deux équipes à moins de 2 min du même lieu</div>'
+      :'<div style="background:var(--success-bg);border:1px solid var(--success);border-radius:6px;padding:7px 12px;font-size:12px;color:var(--success);margin-bottom:8px">✓ Aucun conflit</div>'}
   <svg width="${LBL+W+10}" height="${appData.teams.length*ROW_H+18}" style="display:block;overflow:visible">${ticks}${rows}</svg>
   <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
-    ${[['#8DBF9A','Marche'],['#1E6A7A','Étape'],['#7A9AAA','Règles'],['#2A4A5A','Épreuve'],['#FF4040','⚠️ Collision']].map(([c,l])=>
+    ${[['#C8D8DC','Attente'],['#8DBF9A','Marche'],['#1E6A7A','Étape'],['#7A9AAA','Règles'],['#2A4A5A','Épreuve'],['#FF8C00','🟠 Proximité <2min'],['#FF4040','🔴 Collision']].map(([c,l])=>
       `<div style="display:flex;align-items:center;gap:3px"><div style="width:10px;height:10px;border-radius:2px;background:${c}"></div><span style="font-size:10px;color:var(--ink-muted)">${l}</span></div>`).join('')}
   </div>`;
 }
@@ -1584,9 +1696,7 @@ function renderBlocCompact(bloc, k, tenc, teamName) {
         <div style="font-size:9px;color:var(--ink-muted);margin-bottom:2px">⏱ Durée totale (s) <span style="color:var(--ink-muted)">(min ${(bloc.dureeMarche||300)+(bloc.dureeEtape||300)+(bloc.dureeRegles||120)+(bloc.dureeEpreuve||600)}s)</span></div>
         <input type="number" min="${(bloc.dureeMarche||300)+(bloc.dureeEtape||300)+(bloc.dureeRegles||120)+(bloc.dureeEpreuve||600)}" value="${bloc.dureeBloc||1200}" onchange="updateBlocField('${tenc}',${k},'dureeBloc',+this.value)"
           style="width:100%;padding:4px 6px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-size:12px;text-align:center">
-        <div style="font-size:9px;color:var(--ink-muted);margin-top:2px;line-height:1.4">
-          🚶${bloc.dureeMarche||300}s + 🔍${bloc.dureeEtape||300}s + 📜${bloc.dureeRegles||120}s + 🎯${bloc.dureeEpreuve||600}s = ${(bloc.dureeMarche||300)+(bloc.dureeEtape||300)+(bloc.dureeRegles||120)+(bloc.dureeEpreuve||600)}s min
-        </div>
+
       </div>
       <div>
         <div style="font-size:9px;color:var(--ink-muted);margin-bottom:2px">🚶 Marche (s)</div>
@@ -1595,9 +1705,11 @@ function renderBlocCompact(bloc, k, tenc, teamName) {
       </div>
     </div>
     <div style="display:flex;border-radius:3px;overflow:hidden;height:14px;margin-bottom:3px">${miniBar}</div>
-    <div style="font-size:9px;color:${attenteOk?'var(--ink-muted)':'var(--danger)'}">
-      Att.${bloc.delaiCalcule||0}s · Marche ${bloc.dureeMarche||300}s · Étape ${bloc.dureeEtape||300}s · Règles ${bloc.dureeRegles||120}s · Épreuve ${bloc.dureeEpreuve||600}s
-      ${!attenteOk?' ⚠️ trop court':''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:3px">
+      ${[['#C8D8DC',`Att. ${bloc.delaiCalcule||0}s`],['#8DBF9A',`Marche ${bloc.dureeMarche||300}s`],['#1E6A7A',`Étape ${bloc.dureeEtape||'?'}s`],['#7A9AAA',`Règles ${bloc.dureeRegles||'?'}s`],['#2A4A5A',`Épreuve ${bloc.dureeEpreuve||'?'}s`]].map(([c,l])=>
+        `<div style="display:flex;align-items:center;gap:2px"><div style="width:8px;height:8px;border-radius:1px;background:${c}"></div><span style="font-size:9px;color:var(--ink-muted)">${l}</span></div>`
+      ).join('')}
+      ${!attenteOk?'<span style="font-size:9px;color:var(--danger);font-weight:600">⚠️ trop court</span>':''}
     </div>
   </div>`;
 }
@@ -1725,10 +1837,19 @@ function renderTeamEditor() {
       </div>
       <div id="parcoursBlocs_${i}">${renderParcours(t)}</div>
       <div style="display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
-        <button class="btn btn-gold" onclick="saveEquipe(${i})">💾 Enregistrer ${t}</button>
-        <span class="save-msg" id="saveMsg_${i}" style="display:none">Enregistré ✓</span>
+        <button class="btn btn-gold" onclick="saveAllEquipes()">💾 Enregistrer toutes les équipes</button>
+        <span class="save-msg" id="saveAllMsg" style="display:none">Enregistré ✓</span>
       </div>
     </div>`;
+}
+
+async function saveAllEquipes() {
+  for (let i = 0; i < appData.teams.length; i++) {
+    await saveEquipe(i);
+  }
+  const msg = document.getElementById('saveAllMsg');
+  if (msg) { msg.style.display='inline'; setTimeout(()=>msg.style.display='none', 2500); }
+  showToast({icon:'✅', title:'Toutes les équipes enregistrées', duration:2500});
 }
 
 async function saveEquipe(i) {
@@ -3408,7 +3529,8 @@ async function saveEpDureeAndEpreuve(epId, epType) {
   if (!appData.jdpEpreuves[epId]) appData.jdpEpreuves[epId] = {};
   appData.jdpEpreuves[epId].duree = duree;
   await db.from('epreuves').update({duree, dureeRegles}).eq('id', epId);
-  if (epType==='villes') saveVillesBacAndEpreuve();
+  if (epType==='photos') savePhotosAndEpreuve();
+  else if (epType==='villes') saveVillesBacAndEpreuve();
   else if (epType==='qcm') saveAnecdotesAndEpreuve();
   else saveEpreuve();
 }
