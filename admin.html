@@ -1502,8 +1502,8 @@ function renderGantt() {
   });
   if(!totalMax){ el.innerHTML='<div style="font-size:13px;color:var(--ink-muted);padding:8px">Configurez les parcours pour voir le planning.</div>'; return; }
 
-  // Détection collisions
-  const LIEUX_TYPES = ['marche','etape','regles','epreuve'];
+  // Détection collisions — uniquement sur place (étape, règles, épreuve), pas pendant la marche
+  const LIEUX_TYPES = ['etape','regles','epreuve'];
   const etapeSegs = allSegments.filter(s=>LIEUX_TYPES.includes(s.type));
   const collisionIdx = new Set();
   for(let i=0;i<etapeSegs.length;i++) for(let j=i+1;j<etapeSegs.length;j++) {
@@ -1581,9 +1581,12 @@ function renderBlocCompact(bloc, k, tenc, teamName) {
     </select>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:6px">
       <div>
-        <div style="font-size:9px;color:var(--ink-muted);margin-bottom:2px">⏱ Durée totale (s)</div>
-        <input type="number" min="60" value="${bloc.dureeBloc||1200}" onchange="updateBlocField('${tenc}',${k},'dureeBloc',+this.value)"
+        <div style="font-size:9px;color:var(--ink-muted);margin-bottom:2px">⏱ Durée totale (s) <span style="color:var(--ink-muted)">(min ${(bloc.dureeMarche||300)+(bloc.dureeEtape||300)+(bloc.dureeRegles||120)+(bloc.dureeEpreuve||600)}s)</span></div>
+        <input type="number" min="${(bloc.dureeMarche||300)+(bloc.dureeEtape||300)+(bloc.dureeRegles||120)+(bloc.dureeEpreuve||600)}" value="${bloc.dureeBloc||1200}" onchange="updateBlocField('${tenc}',${k},'dureeBloc',+this.value)"
           style="width:100%;padding:4px 6px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-size:12px;text-align:center">
+        <div style="font-size:9px;color:var(--ink-muted);margin-top:2px;line-height:1.4">
+          🚶${bloc.dureeMarche||300}s + 🔍${bloc.dureeEtape||300}s + 📜${bloc.dureeRegles||120}s + 🎯${bloc.dureeEpreuve||600}s = ${(bloc.dureeMarche||300)+(bloc.dureeEtape||300)+(bloc.dureeRegles||120)+(bloc.dureeEpreuve||600)}s min
+        </div>
       </div>
       <div>
         <div style="font-size:9px;color:var(--ink-muted);margin-bottom:2px">🚶 Marche (s)</div>
@@ -1610,6 +1613,16 @@ function updateBlocField(tenc, k, field, val) {
   const t = decodeURIComponent(tenc);
   const p = getParcours(t);
   p[k][field] = val;
+  // Recalculer le minimum après normalisation
+  const bloc = getParcours(t)[k]; // normalisé avec dureeEtape/Epreuve/Regles
+  const minBloc = (bloc.dureeMarche||300) + (bloc.dureeEtape||300) + (bloc.dureeRegles||120) + (bloc.dureeEpreuve||600);
+  if ((p[k].dureeBloc||0) < minBloc) {
+    p[k].dureeBloc = minBloc;
+    // Mettre à jour le champ dans le DOM si visible
+    const inputBloc = document.querySelector(`input[onchange*="dureeBloc"][onchange*="'${tenc}',${k},"]`);
+    if (inputBloc) inputBloc.value = minBloc;
+    showToast({icon:'⚠️', title:'Durée totale ajustée', msg:`Minimum : ${minBloc}s`, duration:2500});
+  }
   appData.jdpOrdre[t] = p;
   const i = appData.teams.indexOf(t);
   const el = document.getElementById('parcoursBlocs_'+i);
