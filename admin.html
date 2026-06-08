@@ -301,6 +301,15 @@ input[type=file]{display:none}
     <div id="etapeEditor"></div>
   </div>
   <div id="aEquipes" class="page active">
+    <!-- Vue Gantt collision -->
+    <div class="card" style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card-title" style="margin:0">📊 Vue planning — collisions</div>
+        <button class="btn btn-sm" onclick="renderGantt()">↻ Actualiser</button>
+      </div>
+      <div id="ganttView" style="overflow-x:auto"></div>
+    </div>
+    <!-- Config par équipe -->
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div class="card-title" style="margin:0">Équipes</div>
@@ -1463,103 +1472,138 @@ function renderTimeline(parcours) {
   </div>`;
 }
 
+// ---- Vue Gantt ----
+const TEAM_COLORS = ['#1E6A7A','#5A9A6A','#B87A3A','#8A4A7A'];
+
+function renderGantt() {
+  const el = document.getElementById('ganttView');
+  if (!el) return;
+  const allSegments = [];
+  let totalMax = 0;
+  appData.teams.forEach((t, ti) => {
+    const parcours = getParcours(t);
+    let cursor = 0;
+    parcours.forEach((bloc, k) => {
+      const etape  = appData.etapes.find(e=>String(e.id)===String(bloc.etapeId));
+      const lieu   = etape?.lieu || etape?.nom || `Étape ${k+1}`;
+      const nom    = etape?.nom  || `Étape ${k+1}`;
+      const delai  = bloc.delaiCalcule||0;
+      const marche = bloc.dureeMarche||300;
+      const etapeDur = bloc.dureeEtape||300;
+      const regles   = bloc.dureeRegles||120;
+      const epreuve  = bloc.dureeEpreuve||600;
+      if(delai>0)    { allSegments.push({team:t,teamIdx:ti,lieu:'⏸',nom:'Attente',type:'delai',tStart:cursor,tEnd:cursor+delai,color:'#C8D8DC'}); cursor+=delai; }
+      if(marche>0)   { allSegments.push({team:t,teamIdx:ti,lieu,nom,type:'marche',tStart:cursor,tEnd:cursor+marche,color:'#8DBF9A'}); cursor+=marche; }
+      if(etapeDur>0) { allSegments.push({team:t,teamIdx:ti,lieu,nom,type:'etape',tStart:cursor,tEnd:cursor+etapeDur,color:TEAM_COLORS[ti%4]}); cursor+=etapeDur; }
+      if(regles>0)   { allSegments.push({team:t,teamIdx:ti,lieu,nom,type:'regles',tStart:cursor,tEnd:cursor+regles,color:'#7A9AAA'}); cursor+=regles; }
+      if(epreuve>0)  { allSegments.push({team:t,teamIdx:ti,lieu,nom,type:'epreuve',tStart:cursor,tEnd:cursor+epreuve,color:'#2A4A5A'}); cursor+=epreuve; }
+    });
+    totalMax = Math.max(totalMax, cursor);
+  });
+  if(!totalMax){ el.innerHTML='<div style="font-size:13px;color:var(--ink-muted);padding:8px">Configurez les parcours pour voir le planning.</div>'; return; }
+
+  // Détection collisions
+  const LIEUX_TYPES = ['marche','etape','regles','epreuve'];
+  const etapeSegs = allSegments.filter(s=>LIEUX_TYPES.includes(s.type));
+  const collisionIdx = new Set();
+  for(let i=0;i<etapeSegs.length;i++) for(let j=i+1;j<etapeSegs.length;j++) {
+    const a=etapeSegs[i],b=etapeSegs[j];
+    if(a.team!==b.team && a.lieu===b.lieu && a.lieu!=='⏸' && a.tStart<b.tEnd && b.tStart<a.tEnd) { collisionIdx.add(i); collisionIdx.add(j); }
+  }
+  etapeSegs.forEach((s,i)=>{ if(collisionIdx.has(i)) s.collision=true; });
+
+  const W=620, ROW_H=32, LBL=72, scale=W/totalMax;
+  const TICK=300;
+  let ticks='';
+  for(let t=0;t<=totalMax;t+=TICK){
+    const x=LBL+t*scale;
+    ticks+=`<line x1="${x}" y1="0" x2="${x}" y2="${appData.teams.length*ROW_H}" stroke="var(--border)" stroke-width="1"/>
+      <text x="${x}" y="${appData.teams.length*ROW_H+12}" font-size="9" fill="var(--ink-muted)" text-anchor="middle">+${Math.floor(t/60)}m</text>`;
+  }
+  let rows='';
+  appData.teams.forEach((t,ti)=>{
+    const y=ti*ROW_H;
+    rows+=`<text x="${LBL-4}" y="${y+ROW_H/2+4}" font-size="11" fill="var(--ink)" text-anchor="end" font-family="DM Sans">${t}</text>`;
+    rows+=`<rect x="${LBL}" y="${y+3}" width="${W}" height="${ROW_H-6}" fill="var(--cream)" rx="2"/>`;
+    allSegments.filter(s=>s.team===t).forEach(s=>{
+      const x=LBL+s.tStart*scale, w=Math.max(2,(s.tEnd-s.tStart)*scale);
+      const fill=s.collision?'#FF4040':s.color;
+      rows+=`<rect x="${x}" y="${y+3}" width="${w}" height="${ROW_H-6}" fill="${fill}" rx="2" opacity="${s.type==='delai'?0.35:0.88}"><title>${s.nom} · ${s.type} · +${Math.floor(s.tStart/60)}m–+${Math.floor(s.tEnd/60)}m${s.collision?' ⚠️ COLLISION':''}</title></rect>`;
+      if(w>28&&s.type!=='delai') rows+=`<text x="${x+w/2}" y="${y+ROW_H/2+4}" font-size="9" fill="white" text-anchor="middle" style="pointer-events:none">${(s.nom||'').slice(0,9)}</text>`;
+    });
+  });
+  const hasC = collisionIdx.size>0;
+  el.innerHTML=`${hasC
+    ?'<div style="background:#FFF0F0;border:1px solid var(--danger);border-radius:6px;padding:7px 12px;font-size:12px;color:var(--danger);margin-bottom:8px">⚠️ Collision — deux équipes au même endroit</div>'
+    :'<div style="background:var(--success-bg);border:1px solid var(--success);border-radius:6px;padding:7px 12px;font-size:12px;color:var(--success);margin-bottom:8px">✓ Aucune collision</div>'}
+  <svg width="${LBL+W+10}" height="${appData.teams.length*ROW_H+18}" style="display:block;overflow:visible">${ticks}${rows}</svg>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+    ${[['#8DBF9A','Marche'],['#1E6A7A','Étape'],['#7A9AAA','Règles'],['#2A4A5A','Épreuve'],['#FF4040','⚠️ Collision']].map(([c,l])=>
+      `<div style="display:flex;align-items:center;gap:3px"><div style="width:10px;height:10px;border-radius:2px;background:${c}"></div><span style="font-size:10px;color:var(--ink-muted)">${l}</span></div>`).join('')}
+  </div>`;
+}
+
+// ---- Bloc compact ----
+function renderBlocCompact(bloc, k, tenc, teamName) {
+  const etapeId  = bloc.etapeId ? String(bloc.etapeId) : null;
+  const etape    = appData.etapes.find(e=>String(e.id)===etapeId);
+  const epreuve  = etape?.epreuveId ? appData.epreuves.find(ep=>String(ep.id)===String(etape.epreuveId)) : null;
+  const usedAtPos      = appData.teams.filter(tn=>tn!==teamName).map(tn=>getParcours(tn)[k]?.etapeId).filter(Boolean).map(String);
+  const usedInParcours = getParcours(teamName).filter((_,idx)=>idx!==k).map(b=>b.etapeId).filter(Boolean).map(String);
+  const total = bloc.dureeBloc||1200;
+  const parts = [
+    {dur:bloc.delaiCalcule||0,  color:'#C8D8DC'},
+    {dur:bloc.dureeMarche||300, color:'#8DBF9A'},
+    {dur:bloc.dureeEtape||300,  color:'#1E6A7A'},
+    {dur:bloc.dureeRegles||120, color:'#7A9AAA'},
+    {dur:bloc.dureeEpreuve||600,color:'#2A4A5A'},
+  ].filter(p=>p.dur>0);
+  const miniBar = parts.map(p=>`<div title="${fmtSec(p.dur)}" style="flex:${(p.dur/total*100).toFixed(1)};background:${p.color};height:14px;min-width:2px"></div>`).join('');
+  const attenteOk = (bloc.delaiCalcule||0) >= 0;
+  return `<div style="background:var(--cream);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 11px;margin-bottom:7px">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">
+      <span style="font-size:11px;font-weight:700;color:var(--gold-dark);min-width:14px">${k+1}</span>
+      <div style="flex:1">
+        <div style="font-size:12px;font-weight:500;color:var(--ink)">${etape?.nom||'—'}</div>
+        <div style="font-size:11px;color:var(--ink-muted)">${epreuve?.title||'Aucune épreuve'}</div>
+      </div>
+      <button onclick="moveParcours('${tenc}',${k},-1)" style="background:none;border:1px solid var(--border);border-radius:3px;padding:1px 5px;cursor:pointer;font-size:10px;color:var(--ink-muted)" ${k===0?'disabled':''}>↑</button>
+      <button onclick="moveParcours('${tenc}',${k},1)" style="background:none;border:1px solid var(--border);border-radius:3px;padding:1px 5px;cursor:pointer;font-size:10px;color:var(--ink-muted)">↓</button>
+      <button onclick="removeBloc('${tenc}',${k})" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:13px;padding:1px 4px">✕</button>
+    </div>
+    <select onchange="updateBlocEtape('${tenc}',${k},this.value)"
+      style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:12px;margin-bottom:7px">
+      <option value="">— Choisir une étape —</option>
+      ${appData.etapes.map(e=>{
+        const eStr=String(e.id), conflict=(usedAtPos.includes(eStr)||usedInParcours.includes(eStr))&&eStr!==etapeId;
+        return `<option value="${e.id}" ${eStr===etapeId?'selected':''} ${conflict?'disabled':''}>${conflict?'🚫 ':''}${e.nom}${conflict?' (indisponible)':''}</option>`;
+      }).join('')}
+    </select>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:6px">
+      <div>
+        <div style="font-size:9px;color:var(--ink-muted);margin-bottom:2px">⏱ Durée totale (s)</div>
+        <input type="number" min="60" value="${bloc.dureeBloc||1200}" onchange="updateBlocField('${tenc}',${k},'dureeBloc',+this.value)"
+          style="width:100%;padding:4px 6px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-size:12px;text-align:center">
+      </div>
+      <div>
+        <div style="font-size:9px;color:var(--ink-muted);margin-bottom:2px">🚶 Marche (s)</div>
+        <input type="number" min="0" value="${bloc.dureeMarche||300}" onchange="updateBlocField('${tenc}',${k},'dureeMarche',+this.value)"
+          style="width:100%;padding:4px 6px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-size:12px;text-align:center">
+      </div>
+    </div>
+    <div style="display:flex;border-radius:3px;overflow:hidden;height:14px;margin-bottom:3px">${miniBar}</div>
+    <div style="font-size:9px;color:${attenteOk?'var(--ink-muted)':'var(--danger)'}">
+      Att.${bloc.delaiCalcule||0}s · Marche ${bloc.dureeMarche||300}s · Étape ${bloc.dureeEtape||300}s · Règles ${bloc.dureeRegles||120}s · Épreuve ${bloc.dureeEpreuve||600}s
+      ${!attenteOk?' ⚠️ trop court':''}
+    </div>
+  </div>`;
+}
+
 function renderParcours(teamName) {
   const parcours = getParcours(teamName);
   const tenc = encodeURIComponent(teamName);
   if (!parcours.length) return `<div style="font-size:13px;color:var(--ink-muted);font-style:italic">Aucun bloc — cliquez + Ajouter</div>`;
-  const blocs = parcours.map((bloc, k) => {
-    const etape   = appData.etapes.find(e=>String(e.id)===String(bloc.etapeId));
-    const epreuve = appData.epreuves.find(e=>e.id===bloc.epreuveId);
-    const {events} = buildTimeline(parcours.slice(0,k+1));
-    const lastEv = events[events.length-1];
-    const startOffset = events.find(e=>e.type==='etape'&&e.label===`Étape ${k+1}`)?.t ?? 0;
-    return `<div style="background:var(--cream);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-        <span style="font-size:12px;font-weight:700;color:var(--gold-dark);min-width:18px">${k+1}</span>
-        <span style="flex:1;font-size:12px;font-weight:600;color:var(--ink-muted)">Bloc ${k+1} — H+${fmtSec(startOffset)}</span>
-        <button onclick="moveParcours('${tenc}',${k},-1)" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 7px;cursor:pointer;color:var(--ink-muted);font-size:11px" ${k===0?'disabled':''}>↑</button>
-        <button onclick="moveParcours('${tenc}',${k},1)" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 7px;cursor:pointer;color:var(--ink-muted);font-size:11px" ${k===parcours.length-1?'disabled':''}>↓</button>
-        <button onclick="removeBloc('${tenc}',${k})" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:14px;padding:2px 5px">✕</button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
-        <div>
-          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">⏱ Durée totale bloc (s)</div>
-          <input type="number" min="60" value="${bloc.dureeBloc||1200}" onchange="updateBlocField('${tenc}',${k},'dureeBloc',+this.value)"
-            style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
-        </div>
-        <div>
-          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">🚶 Durée marche (s)</div>
-          <input type="number" min="0" value="${bloc.dureeMarche??300}" onchange="updateBlocField('${tenc}',${k},'dureeMarche',+this.value)"
-            style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
-        </div>
-        <div>
-          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">🔍 Durée étape (auto)</div>
-          <div style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink-muted);font-size:12px;text-align:center">
-            ${bloc.dureeEtape||'—'} s
-          </div>
-        </div>
-        <div>
-          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">🎯 Durée épreuve (auto)</div>
-          <div style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink-muted);font-size:12px;text-align:center">
-            ${bloc.dureeEpreuve||'—'} s
-          </div>
-        </div>
-        <div>
-          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">⏸ Attente calculée</div>
-          <div style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:${(bloc.delaiCalcule||0)<0?'var(--danger)':'var(--ink-muted)'};font-size:12px;text-align:center">
-            ${bloc.delaiCalcule||0} s${(bloc.delaiCalcule||0)<0?' ⚠️ Durée totale trop courte':''}
-          </div>
-        </div>
-        <div>
-          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">📜 Durée règles (auto)</div>
-          <div style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink-muted);font-size:12px;text-align:center">
-            ${bloc.dureeRegles||'—'} s
-          </div>
-        </div>
-      </div>
-      ${(() => {
-        // Anti-collision inter-équipes (même position)
-        const usedAtPos = appData.teams
-          .filter(tn => tn !== teamName)
-          .map(tn => getParcours(tn)[k]?.etapeId)
-          .filter(Boolean)
-          .map(String);
-        // Anti-doublon intra-équipe (même parcours, autre bloc)
-        const usedInParcours = getParcours(teamName)
-          .filter((_,idx) => idx !== k)
-          .map(b => b.etapeId)
-          .filter(Boolean)
-          .map(String);
-        const etapeAssocId = bloc.etapeId ? String(bloc.etapeId) : null;
-        const etapeAssoc = appData.etapes.find(e=>String(e.id)===etapeAssocId);
-        const epAssoc = etapeAssoc?.epreuveId ? appData.epreuves.find(ep=>String(ep.id)===String(etapeAssoc.epreuveId)) : null;
-        return `<div style="margin-bottom:6px">
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
-            <span style="font-size:11px;color:var(--ink-muted);min-width:60px">🧭 Étape</span>
-            <select onchange="updateBlocEtape('${tenc}',${k},this.value)"
-              style="flex:1;padding:6px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
-              <option value="">— Choisir —</option>
-              ${appData.etapes.map(e=>{
-                const eIdStr = String(e.id);
-                const blocIdStr = bloc.etapeId ? String(bloc.etapeId) : null;
-                const conflictInter = usedAtPos.map(String).includes(eIdStr) && eIdStr !== blocIdStr;
-                const conflictIntra = usedInParcours.map(String).includes(eIdStr) && eIdStr !== blocIdStr;
-                const disabled = conflictInter || conflictIntra;
-                const reason = conflictInter ? ' (autre équipe)' : conflictIntra ? ' (déjà dans ce parcours)' : '';
-                return `<option value="${e.id}" ${eIdStr===blocIdStr?'selected':''} ${disabled?'disabled':''}>
-                  ${disabled?'🚫 ':''} ${e.nom}${reason}
-                </option>`;
-              }).join('')}
-            </select>
-          </div>
-          <div style="margin-left:68px;font-size:12px;color:${epAssoc?'var(--gold-dark)':'var(--ink-muted)'};font-style:${epAssoc?'normal':'italic'}">
-            ${epAssoc ? `🎯 ${epAssoc.title} · ${bloc.dureeEpreuve||600}s` : etapeAssoc ? 'Aucune épreuve configurée sur cette étape' : ''}
-          </div>
-        </div>`;
-      })()}
-    </div>`;
-  }).join('');
-  return blocs + renderTimeline(parcours);
+  return parcours.map((bloc, k) => renderBlocCompact(bloc, k, tenc, teamName)).join('') + renderTimeline(parcours);
 }
 
 function updateBlocField(tenc, k, field, val) {
@@ -1567,22 +1611,21 @@ function updateBlocField(tenc, k, field, val) {
   const p = getParcours(t);
   p[k][field] = val;
   appData.jdpOrdre[t] = p;
-  // Rafraîchir la timeline et l'attente calculée
   const i = appData.teams.indexOf(t);
   const el = document.getElementById('parcoursBlocs_'+i);
   if (el) el.innerHTML = renderParcours(t);
+  renderGantt();
 }
 function updateBlocDelai(tenc, k, val) { updateBlocField(tenc, k, 'delai', parseInt(val)||0); }
 function updateBlocEtape(tenc, k, val) {
   const t = decodeURIComponent(tenc);
   const p = getParcours(t);
-  // Stocker en string pour éviter les problèmes de précision des grands entiers
   p[k].etapeId = val || null;
   appData.jdpOrdre[t] = p;
-  // Rafraîchir le DOM pour afficher l'épreuve associée et recalculer dureeEpreuve
   const i = appData.teams.indexOf(t);
   const el = document.getElementById('parcoursBlocs_'+i);
   if (el) el.innerHTML = renderParcours(t);
+  renderGantt();
 }
 function updateBlocEpreuve(tenc, k, val) {
   const t = decodeURIComponent(tenc);
@@ -1636,6 +1679,7 @@ function selectTeamTab(i) {
 function renderTeamFields() {
   renderTeamTabs();
   renderTeamEditor();
+  renderGantt();
 }
 
 function renderTeamEditor() {
