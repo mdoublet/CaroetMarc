@@ -302,13 +302,12 @@ input[type=file]{display:none}
   </div>
   <div id="aEquipes" class="page active">
     <div class="card">
-      <div class="card-title">Équipes</div>
-      <div id="teamNameFields"></div>
-      <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
-        <button class="btn btn-sm" onclick="addTeam()">+ Ajouter une équipe</button>
-        <button class="btn btn-gold btn-sm" onclick="saveTeams()">💾 Enregistrer</button>
-        <span class="save-msg" id="teamSaveMsg">Sauvegardé ✓</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div class="card-title" style="margin:0">Équipes</div>
+        <button class="btn btn-sm" onclick="addTeam()">+ Ajouter</button>
       </div>
+      <div id="teamTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"></div>
+      <div id="teamNameFields"></div>
     </div>
   </div>
   <div id="aJoueurs" class="page">
@@ -1246,7 +1245,13 @@ function renderEpEditor(){
       <input type="hidden" id="epInstrHidden" value="${(ep.instructions||'').replace(/"/g,'&quot;')}">
     </div></div>
     <div class="field"><div class="field-label">Règle de scoring</div><input type="text" class="admin-input" id="epScoring" value="${ep.scoring||''}"></div>
-    <div class="field"><div class="field-label">Score maximum</div><input type="number" class="admin-input" id="epMax" value="${ep.max_score||10}" style="width:80px"></div>`;
+    <div class="field"><div class="field-label">Score maximum</div><input type="number" class="admin-input" id="epMax" value="${ep.max_score||10}" style="width:80px"></div>
+    <div class="field"><div class="field-label">Durée de l'épreuve (s) ⏱</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="number" class="admin-input" id="epDuree" value="${ep.duree||600}" min="60" style="width:100px;text-align:center">
+        <span style="font-size:12px;color:var(--ink-muted)">secondes</span>
+      </div>
+    </div>`;
   if(ep.type==='photos'){
     h+=`<div class="divider"></div>`;
   }
@@ -1367,7 +1372,8 @@ async function saveEpreuve(){
   ep.instructions=instrEl ? instrEl.innerHTML : '';
   ep.scoring=document.getElementById('epScoring').value;
   ep.max_score=parseInt(document.getElementById('epMax').value)||10;
-  await db.from('epreuves').update({title:ep.title,instructions:ep.instructions,scoring:ep.scoring,max_score:ep.max_score}).eq('id',ep.id);
+  ep.duree=parseInt(document.getElementById('epDuree').value)||600;
+  await db.from('epreuves').update({title:ep.title,instructions:ep.instructions,scoring:ep.scoring,max_score:ep.max_score,duree:ep.duree}).eq('id',ep.id);
   await db.from('questions').delete().eq('epreuve_id',ep.id);
   const qs=(appData.questions[ep.id]||[]).map((q,i)=>({epreuve_id:ep.id,ordre:i,contenu:q.contenu}));
   if(qs.length) await db.from('questions').insert(qs);
@@ -1392,15 +1398,19 @@ function getParcours(teamName) {
     const dureeMarche  = b.dureeMarche??300;
     const dureeEnigme  = b.dureeEnigme??Math.max(0, dureeEtape - dureeMarche);
     const delaiCalcule = Math.max(0, dureeEtape - dureeMarche - dureeEnigme);
+    // dureeEpreuve : lue depuis l'épreuve associée à l'étape
+    const etape = appData.etapes.find(e=>e.id===(b.etapeId||null));
+    const epreuve = etape?.epreuveId ? appData.epreuves.find(ep=>ep.id===etape.epreuveId) : null;
+    const dureeEpreuve = epreuve ? ((epreuve.duree||epreuve.max_score*60)||600) : (b.dureeEpreuve||600);
+    const dureeRegles  = epreuve ? (epreuve.dureeRegles||b.dureeRegles||120) : (b.dureeRegles||120);
     return {
       etapeId:     b.etapeId||null,
       dureeEtape,
       dureeMarche,
       dureeEnigme,
-      delaiCalcule, // lecture seule — calculé automatiquement
-      dureeRegles:  b.dureeRegles||120,
-      dureeEpreuve: b.dureeEpreuve||600,
-      epreuveId:    b.epreuveId||null
+      delaiCalcule,
+      dureeRegles,
+      dureeEpreuve, // calculé depuis l'épreuve
     };
   });
 }
@@ -1498,15 +1508,22 @@ function renderParcours(teamName) {
             style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
         </div>
         <div>
-          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">🎯 Durée épreuve (s)</div>
-          <input type="number" min="60" value="${bloc.dureeEpreuve||600}" onchange="updateBlocField('${tenc}',${k},'dureeEpreuve',+this.value)"
-            style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center">
+          <div style="font-size:10px;color:var(--ink-muted);margin-bottom:3px">🎯 Durée épreuve</div>
+          <div style="width:100%;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink-muted);font-size:12px;text-align:center">
+            ${bloc.dureeEpreuve ? bloc.dureeEpreuve+'s (auto)' : '—'}
+          </div>
         </div>
       </div>
       ${(() => {
+        // Anti-collision inter-équipes (même position)
         const usedAtPos = appData.teams
           .filter(tn => tn !== teamName)
           .map(tn => getParcours(tn)[k]?.etapeId)
+          .filter(Boolean);
+        // Anti-doublon intra-équipe (même parcours, autre bloc)
+        const usedInParcours = getParcours(teamName)
+          .filter((_,idx) => idx !== k)
+          .map(b => b.etapeId)
           .filter(Boolean);
         const etapeAssoc = appData.etapes.find(e=>e.id===bloc.etapeId);
         const epAssoc = etapeAssoc?.epreuveId ? appData.epreuves.find(ep=>ep.id===etapeAssoc.epreuveId) : null;
@@ -1517,15 +1534,18 @@ function renderParcours(teamName) {
               style="flex:1;padding:6px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
               <option value="">— Choisir —</option>
               ${appData.etapes.map(e=>{
-                const conflict = usedAtPos.includes(e.id) && e.id !== bloc.etapeId;
-                return `<option value="${e.id}" ${e.id===bloc.etapeId?'selected':''} ${conflict?'disabled':''}>
-                  ${conflict?'🚫 ':''} ${e.nom}${conflict?' (déjà prise)':''}
+                const conflictInter = usedAtPos.includes(e.id) && e.id !== bloc.etapeId;
+                const conflictIntra = usedInParcours.includes(e.id) && e.id !== bloc.etapeId;
+                const disabled = conflictInter || conflictIntra;
+                const reason = conflictInter ? ' (autre équipe)' : conflictIntra ? ' (déjà dans ce parcours)' : '';
+                return `<option value="${e.id}" ${e.id===bloc.etapeId?'selected':''} ${disabled?'disabled':''}>
+                  ${disabled?'🚫 ':''} ${e.nom}${reason}
                 </option>`;
               }).join('')}
             </select>
           </div>
           <div style="margin-left:68px;font-size:12px;color:${epAssoc?'var(--gold-dark)':'var(--ink-muted)'};font-style:${epAssoc?'normal':'italic'}">
-            ${epAssoc ? '🎯 Épreuve : '+epAssoc.title : etapeAssoc ? 'Aucune épreuve configurée sur cette étape' : ''}
+            ${epAssoc ? `🎯 ${epAssoc.title} · ${bloc.dureeEpreuve||600}s` : etapeAssoc ? 'Aucune épreuve configurée sur cette étape' : ''}
           </div>
         </div>`;
       })()}
@@ -1539,9 +1559,9 @@ function updateBlocField(tenc, k, field, val) {
   const p = getParcours(t);
   p[k][field] = val;
   appData.jdpOrdre[t] = p;
-  // Mettre à jour la timeline
-  const ti = appData.teams.indexOf(t);
-  const el = document.getElementById('parcoursBlocs_'+ti);
+  // Rafraîchir la timeline et l'attente calculée
+  const i = appData.teams.indexOf(t);
+  const el = document.getElementById('parcoursBlocs_'+i);
   if (el) el.innerHTML = renderParcours(t);
 }
 function updateBlocDelai(tenc, k, val) { updateBlocField(tenc, k, 'delai', parseInt(val)||0); }
@@ -1576,18 +1596,43 @@ function removeBloc(tenc, k) {
 function addBloc(tenc) {
   const t = decodeURIComponent(tenc);
   const p = getParcours(t);
-  p.push({etapeId:null, dureeEtape:600, dureeMarche:300, dureeEnigme:300, dureeRegles:120, dureeEpreuve:600, epreuveId:null});
+  p.push({etapeId:null, dureeEtape:600, dureeMarche:300, dureeEnigme:300, dureeRegles:120});
   appData.jdpOrdre[t] = p;
   const ti = appData.teams.indexOf(t);
   const el = document.getElementById('parcoursBlocs_'+ti);
   if (el) el.innerHTML = renderParcours(t);
 }
 
-function renderTeamFields(){
-  document.getElementById('teamNameFields').innerHTML=appData.teams.map((t,i)=>{
-    const tenc = encodeURIComponent(t);
-    return `
-    <div style="background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px">
+let currentTeamIdx = 0;
+
+function renderTeamTabs() {
+  const tabs = document.getElementById('teamTabs');
+  if (!tabs) return;
+  tabs.innerHTML = appData.teams.map((t,i) =>
+    `<button class="ep-tab${i===currentTeamIdx?' active':''}" onclick="selectTeamTab(${i})">${t}</button>`
+  ).join('');
+}
+
+function selectTeamTab(i) {
+  currentTeamIdx = i;
+  renderTeamTabs();
+  renderTeamEditor();
+}
+
+function renderTeamFields() {
+  renderTeamTabs();
+  renderTeamEditor();
+}
+
+function renderTeamEditor() {
+  const container = document.getElementById('teamNameFields');
+  if (!container || !appData.teams.length) { if(container) container.innerHTML=''; return; }
+  const i = currentTeamIdx;
+  const t = appData.teams[i];
+  if (!t) return;
+  const tenc = encodeURIComponent(t);
+  container.innerHTML = `
+    <div style="background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
         <span style="font-size:12px;color:var(--ink-muted);min-width:20px;text-align:right">${i+1}</span>
         <input type="text" class="admin-input" value="${t}" id="tname${i}" placeholder="Nom de l'équipe"
@@ -1608,12 +1653,11 @@ function renderTeamFields(){
         <button class="btn btn-sm" onclick="addBloc('${tenc}')" style="font-size:11px;padding:4px 10px">+ Ajouter un bloc</button>
       </div>
       <div id="parcoursBlocs_${i}">${renderParcours(t)}</div>
-      <div style="display:flex;align-items:center;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
         <button class="btn btn-gold" onclick="saveEquipe(${i})">💾 Enregistrer ${t}</button>
         <span class="save-msg" id="saveMsg_${i}" style="display:none">Enregistré ✓</span>
       </div>
     </div>`;
-  }).join('');
 }
 
 async function saveEquipe(i) {
@@ -1655,6 +1699,7 @@ async function addTeam(){
   if(!error){
     appData.teams.push(newName);
     appData.scores[newName]={};
+    currentTeamIdx = appData.teams.length - 1;
     renderTeamFields();renderJoueurs();
     showToast({icon:'✅',title:`"${newName}" créée`,msg:'Renommez-la puis cliquez Enregistrer.',duration:3000});
   }
@@ -1671,6 +1716,7 @@ async function deleteTeam(i){
   appData.teams.splice(i,1);
   delete appData.scores[name];
   delete appData.locked[name];
+  currentTeamIdx = Math.max(0, Math.min(currentTeamIdx, appData.teams.length-1));
   renderTeamFields();renderAdminScores();
   showToast({icon:'🗑',title:`"${name}" supprimée`,duration:2500});
 }
