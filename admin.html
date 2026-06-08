@@ -1504,40 +1504,31 @@ function renderParcours(teamName) {
         </div>
       </div>
       ${(() => {
-        // Étapes déjà utilisées à la position k par d'autres équipes
         const usedAtPos = appData.teams
           .filter(tn => tn !== teamName)
           .map(tn => getParcours(tn)[k]?.etapeId)
           .filter(Boolean);
-        const epAssocLabel = id => {
-          const etape = appData.etapes.find(e=>e.id===id);
-          const ep = etape?.epreuveId ? appData.epreuves.find(ep=>ep.id===etape.epreuveId) : null;
-          return ep ? ` · ${ep.title}` : '';
-        };
-        return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-          <span style="font-size:11px;color:var(--ink-muted);min-width:60px">🧭 Étape</span>
-          <select onchange="updateBlocEtape('${tenc}',${k},this.value)"
-            style="flex:1;padding:6px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
-            <option value="">— Choisir —</option>
-            ${appData.etapes.map(e=>{
-              const conflict = usedAtPos.includes(e.id);
-              return `<option value="${e.id}" ${e.id===bloc.etapeId?'selected':''} ${conflict&&e.id!==bloc.etapeId?'disabled style="color:#ccc"':''}>
-                ${conflict&&e.id!==bloc.etapeId?'🚫 ':''} ${e.nom}${epAssocLabel(e.id)} ${conflict&&e.id!==bloc.etapeId?'(déjà prise)':''}
-              </option>`;
-            }).join('')}
-          </select>
+        const etapeAssoc = appData.etapes.find(e=>e.id===bloc.etapeId);
+        const epAssoc = etapeAssoc?.epreuveId ? appData.epreuves.find(ep=>ep.id===etapeAssoc.epreuveId) : null;
+        return `<div style="margin-bottom:6px">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+            <span style="font-size:11px;color:var(--ink-muted);min-width:60px">🧭 Étape</span>
+            <select onchange="updateBlocEtape('${tenc}',${k},this.value)"
+              style="flex:1;padding:6px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--warm-white);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
+              <option value="">— Choisir —</option>
+              ${appData.etapes.map(e=>{
+                const conflict = usedAtPos.includes(e.id) && e.id !== bloc.etapeId;
+                return `<option value="${e.id}" ${e.id===bloc.etapeId?'selected':''} ${conflict?'disabled':''}>
+                  ${conflict?'🚫 ':''} ${e.nom}${conflict?' (déjà prise)':''}
+                </option>`;
+              }).join('')}
+            </select>
+          </div>
+          <div style="margin-left:68px;font-size:12px;color:${epAssoc?'var(--gold-dark)':'var(--ink-muted)'};font-style:${epAssoc?'normal':'italic'}">
+            ${epAssoc ? '🎯 Épreuve : '+epAssoc.title : etapeAssoc ? 'Aucune épreuve configurée sur cette étape' : ''}
+          </div>
         </div>`;
       })()}
-      <div style="display:flex;gap:8px;align-items:center">
-        <span style="font-size:11px;color:var(--ink-muted);min-width:60px">🎯 Épreuve</span>
-        ${(() => {
-          const etapeAssoc = appData.etapes.find(e=>e.id===bloc.etapeId);
-          const epAssoc = etapeAssoc?.epreuveId ? appData.epreuves.find(ep=>ep.id===etapeAssoc.epreuveId) : null;
-          return `<div style="flex:1;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:${epAssoc?'var(--gold-dark)':'var(--ink-muted)'};font-size:13px;font-weight:${epAssoc?'500':'400'}">
-            ${epAssoc ? '✓ '+epAssoc.title : etapeAssoc ? '<em>Aucune épreuve sur cette étape</em>' : '<em>Choisissez d\'abord une étape</em>'}
-          </div>`;
-        })()}
-      </div>
     </div>`;
   }).join('');
   return blocs + renderTimeline(parcours);
@@ -1604,7 +1595,7 @@ function renderTeamFields(){
         <button onclick="deleteTeam(${i})" title="Supprimer"
           style="background:none;border:none;color:var(--danger);font-size:16px;cursor:pointer;padding:4px 6px;line-height:1">✕</button>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
         <span style="font-size:11px;color:var(--ink-muted);min-width:70px">⚓ Capitaine</span>
         <select id="capitaine${i}"
           style="flex:1;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px">
@@ -1613,44 +1604,49 @@ function renderTeamFields(){
         </select>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div style="font-size:11px;font-weight:600;color:var(--gold-dark);text-transform:uppercase;letter-spacing:.4px">🧭 Parcours — Étapes &amp; Épreuves</div>
+        <div style="font-size:11px;font-weight:600;color:var(--gold-dark);text-transform:uppercase;letter-spacing:.4px">🧭 Parcours</div>
         <button class="btn btn-sm" onclick="addBloc('${tenc}')" style="font-size:11px;padding:4px 10px">+ Ajouter un bloc</button>
       </div>
       <div id="parcoursBlocs_${i}">${renderParcours(t)}</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <button class="btn btn-gold" onclick="saveEquipe(${i})">💾 Enregistrer ${t}</button>
+        <span class="save-msg" id="saveMsg_${i}" style="display:none">Enregistré ✓</span>
+      </div>
     </div>`;
   }).join('');
 }
 
-async function saveTeams(){
-  const inputs=appData.teams.map((_,i)=>document.getElementById('tname'+i));
-  const newTeams=inputs.map((el,i)=>(el?el.value.trim():'')||`Équipe ${i+1}`);
-  for(let i=0;i<appData.teams.length;i++){
-    const oldName=appData.teams[i];
-    const newName=newTeams[i];
-    if(oldName===newName) continue;
-    // UPDATE equipes → cascade déclenche UPDATE joueurs automatiquement
+async function saveEquipe(i) {
+  const oldName = appData.teams[i];
+  const newName = document.getElementById('tname'+i)?.value.trim() || oldName;
+
+  // Renommer si besoin
+  if (oldName !== newName) {
     await db.from('equipes').update({nom:newName}).eq('nom',oldName);
-    // Mettre à jour le state local
     if(appData.scores[oldName]){appData.scores[newName]=appData.scores[oldName];delete appData.scores[oldName];}
     if(appData.locked[oldName]){appData.locked[newName]=appData.locked[oldName];delete appData.locked[oldName];}
+    if(appData.jdpOrdre[oldName]){appData.jdpOrdre[newName]=appData.jdpOrdre[oldName];delete appData.jdpOrdre[oldName];}
     appData.joueurs.forEach(j=>{if(j.equipe_nom===oldName)j.equipe_nom=newName;});
+    appData.teams[i] = newName;
   }
-  appData.teams=newTeams;
-  // Sauvegarder les capitaines
-  for(let i=0;i<appData.teams.length;i++){
-    const t=appData.teams[i];
-    const cap=document.getElementById('capitaine'+i)?.value||'';
-    appData.capitaines[t]=cap;
-    await db.from('jp_config').upsert({key:'jdp_capitaine_'+t,value:cap},{onConflict:'key'});
-  }
-  // Sauvegarder les ordres de passage JDP (déjà à jour dans appData.jdpOrdre)
-  for(const t of appData.teams){
-    const ordre = appData.jdpOrdre[t] || appData.epreuves.map(e=>e.id);
-    appData.jdpOrdre[t] = ordre;
-    await db.from('jp_config').upsert({key:'jdp_ordre_'+t, value:JSON.stringify(ordre)},{onConflict:'key'});
-  }
-  renderTeamFields();renderJoueurs();renderAdminScores();
-  showSaveMsg('teamSaveMsg');
+
+  const t = appData.teams[i];
+
+  // Capitaine
+  const cap = document.getElementById('capitaine'+i)?.value||'';
+  appData.capitaines[t] = cap;
+  await db.from('jp_config').upsert({key:'jdp_capitaine_'+t, value:cap},{onConflict:'key'});
+
+  // Parcours — lire depuis appData.jdpOrdre qui est à jour (mis à jour par updateBlocField etc.)
+  const parcours = getParcours(t);
+  appData.jdpOrdre[t] = parcours;
+  await db.from('jp_config').upsert({key:'jdp_ordre_'+t, value:JSON.stringify(parcours)},{onConflict:'key'});
+
+  const msgEl = document.getElementById('saveMsg_'+i);
+  if (msgEl) { msgEl.style.display='inline'; setTimeout(()=>msgEl.style.display='none', 2500); }
+  showToast({icon:'✅', title:`${t} enregistrée`, duration:2000});
+  renderTeamFields();
+  renderJoueurs();
 }
 
 async function addTeam(){
