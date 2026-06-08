@@ -1279,16 +1279,9 @@ function renderEpEditor(){
     </div>`;
   }
 
-  const epDuree = appData.jdpEpreuves[ep.id]?.duree || 300;
+
+  const epDurée = ep.duree || 600;
   h+=`<div class="divider"></div>
-  <div class="field">
-    <div class="field-label">Durée de l'épreuve ⏱</div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <input type="number" id="jdpEpDuree_${ep.id}" value="${epDuree}" min="30" max="3600"
-        style="width:100px;font-size:16px;text-align:center;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif">
-      <span style="font-size:13px;color:var(--ink-muted)">secondes (${Math.floor(epDuree/60)} min)</span>
-    </div>
-  </div>
   <div class="divider"></div>
   <div style="display:flex;align-items:center;gap:10px">
     <button class="btn btn-gold" onclick="saveEpDureeAndEpreuve(${ep.id},'${ep.type}')">💾 Enregistrer</button>
@@ -3333,10 +3326,15 @@ async function deleteEtape(i) {
 }
 
 async function saveEpDureeAndEpreuve(epId, epType) {
-  const duree = parseInt(document.getElementById('jdpEpDuree_'+epId)?.value)||300;
+  // Lire depuis le champ epDuree (colonne epreuves.duree)
+  const duree = parseInt(document.getElementById('epDuree')?.value)||600;
+  const ep = appData.epreuves.find(e=>e.id==epId);
+  if (ep) ep.duree = duree;
+  // Garder aussi dans jdpEpreuves pour compatibilité
   if (!appData.jdpEpreuves[epId]) appData.jdpEpreuves[epId] = {};
   appData.jdpEpreuves[epId].duree = duree;
-  await db.from('jp_config').upsert({key:'jdp_ep_duree_'+epId, value:String(duree)},{onConflict:'key'});
+  // Sauvegarder dans la table epreuves
+  await db.from('epreuves').update({duree}).eq('id', epId);
   if (epType==='villes') saveVillesBacAndEpreuve();
   else if (epType==='qcm') saveAnecdotesAndEpreuve();
   else saveEpreuve();
